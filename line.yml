@@ -1,0 +1,17 @@
+station_name_short_to_full:
+    CHL: CHATELET_LES_HALLES
+    NCH: NOISY_CHAMPS
+    VIN: VINCENNES
+    DEF: LA_DEFENSE_GRANDE_ARCHE
+
+
+station_name_full_to_short: 
+    CHATELET_LES_HALLES: CHL
+    NOISY_CHAMPS: NCH
+    VINCENNES: VIN
+    LA_DEFENSE_GRANDE_ARCHE: DEF
+
+
+directions:
+  east: 1
+  west: 2

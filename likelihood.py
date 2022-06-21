@@ -1,4 +1,6 @@
-"""Estimation of fail-to-board probabilities from AFC and AVL data.
+"""
+Estimation of fail-to-board probabilities from AFC and AVL data.
+Likelihood functions.
 """
 
 __authors__ = "Justine Dorsz"
@@ -6,9 +8,9 @@ __date__ = "2022-02-11"
 
 from time import time
 
-from math import sqrt
 from matplotlib import pyplot
-from numpy import exp, linspace, log
+from numpy import linspace, log
+from pandas import Timedelta, Timestamp
 from scipy.integrate import quad
 from scipy.stats import norm
 from tqdm import tqdm
@@ -16,89 +18,12 @@ from yaml import safe_load
 
 from data import Data
 
-# ---------------------------------------------------------------------------------------
-#
-#                                      Parameters
-#
-# ---------------------------------------------------------------------------------------
-
-
-def read_parameters() -> dict:
-    """Read parameters from file and return a dictionnary."""
-    with open("parameters.yml", "r") as file:
-        parameters = safe_load(file)
-
-    return parameters
-
-
-def shifted_exp_CDF(x: float, inverse_mean: float, shift: float) -> float:
-    """Cumulative distribution of shifted exponential law."""
-    if x < shift:
-        return 0
-    else:
-        return 1 - exp(inverse_mean * (x - shift))
-
-
-def shifted_exp_PDF(x: float, inverse_mean: float, shift: float) -> float:
-    """Density function of shifted exponential law."""
-    if x < shift:
-        return 0
-    else:
-        return exp(inverse_mean * (x - shift)) * 1 / inverse_mean
-
-
-def gaussian_CDF(x: float, mean: float, std: float) -> float:
-    """Cumulative distribution of normal law."""
-    return norm.cdf(x, mean, std)
-
-
-def gaussian_PDF(x: float, mean: float, std: float) -> float:
-    """Density function of normal law."""
-    return norm.pdf(x, mean, std)
-
-
-def bivariate_gaussian_CDF(
-    x: float,
-    distance_mean: float,
-    distance_std: float,
-    speed_mean: float,
-    speed_std: float,
-    covariance: float,
-) -> float:
-    y_x = sqrt(distance_std**2 + (x * speed_std) ** 2 - 2 * x * covariance)
-    num_phi = x * speed_mean - distance_mean
-    return norm.cdf(num_phi / y_x)
-
-
-def bivariate_gaussian_PDF(
-    x: float,
-    distance_mean: float,
-    distance_std: float,
-    speed_mean: float,
-    speed_std: float,
-    covariance: float,
-) -> float:
-    y_x = sqrt(distance_std**2 + (x * speed_std) ** 2 - 2 * x * covariance)
-    phi = norm.pdf((x * speed_mean - distance_mean) / y_x)
-    num = speed_mean * (distance_std**2 - x * covariance) + distance_mean * (
-        x * speed_std**2 - covariance
-    )
-    denom = y_x**3
-    return num * phi / denom
-
-
-def log_normal_quotient_CDF(x: float, mean: float, std: float) -> float:
-    if x == 0:
-        x = 0.01
-    return norm.cdf((log(x) - mean) / std)
-
-
-def log_normal_quotient_PDF(x: float, mean: float, std: float) -> float:
-    if x == 0:
-        x = 0.01
-    frac = 1 / (x * std)
-    return frac * norm.pdf((log(x) - mean) / std)
-
+from probability_laws import (
+    bivariate_gaussian_CDF,
+    bivariate_gaussian_PDF,
+    log_normal_quotient_CDF,
+    log_normal_quotient_PDF,
+)
 
 # ---------------------------------------------------------------------------------------
 #
@@ -108,134 +33,132 @@ def log_normal_quotient_PDF(x: float, mean: float, std: float) -> float:
 
 
 def compute_likelihood_blocks(
-    data: Data, param: dict, distributed_speed: bool, time_distribution: bool
+    data: Data,
+    param: dict,
+    distributed_speed: bool = False,
+    time_distribution_assumption: str = None,
 ) -> dict:
     """Compute likelihood blocks for each couple of feasible headway and
     run per trip, and store the result in a dictionnary with tuple keys."""
 
     # Dictionnary with tuple index.
-    precomputed_blocks_dict = {}
-
-    walked_distance_entrance = []
-    walked_distance_exit = []
+    blocks_by_trip_and_run_pair = {}
 
     print("Computing blocks...")
-    for trip_id in tqdm(data.AFC_df.index):
-        first_feasible_run = data.feasible_runs_dict["first_feasible_run", trip_id]
-        last_feasible_run = data.feasible_runs_dict["last_feasible_run", trip_id]
+    for trip_id in tqdm(data.trips.index):
+        for headway_boarded_pair in data.headway_boarded_run_pair_by_trip[trip_id]:
 
-        trip_first_possible_run = True
-        for boarded_run in range(first_feasible_run, last_feasible_run + 1):
-            for headway_run in range(first_feasible_run, boarded_run + 1):
+            # Pairs are ordered (headway_run, boarded_run)
+            headway_run = headway_boarded_pair[0]
+            boarded_run = headway_boarded_pair[1]
 
-                if time_distribution:
+            if time_distribution_assumption:
+                blocks_by_trip_and_run_pair[
+                    trip_id, headway_run, boarded_run
+                ] = compute_one_likelihood_block(
+                    data,
+                    param,
+                    trip_id,
+                    boarded_run,
+                    headway_run,
+                    time_distribution_assumption,
+                )
 
-                    (
-                        new_block,
-                        walked_distance_O_upper_bound,
-                        walked_distance_destination,
-                    ) = compute_one_likelihood_block_time_distribution_lognormal(
-                        data, param, trip_id, boarded_run, headway_run
-                    )
-                    precomputed_blocks_dict[
-                        trip_id, headway_run, boarded_run
-                    ] = new_block
-
-                elif distributed_speed:
-
-                    new_block = compute_one_likelihood_block_distributed(
-                        data, param, trip_id, boarded_run, headway_run
-                    )
-                    precomputed_blocks_dict[
-                        trip_id, headway_run, boarded_run
-                    ] = new_block
-
-                else:
-                    (
-                        new_block,
-                        walked_distance_O_upper_bound,
-                        walked_distance_destination,
-                    ) = compute_one_likelihood_block(
-                        data, param, trip_id, boarded_run, headway_run
-                    )
-                    precomputed_blocks_dict[
-                        trip_id, headway_run, boarded_run
-                    ] = new_block
-
-                if trip_first_possible_run:
-                    walked_distance_entrance.append(walked_distance_O_upper_bound)
-                    walked_distance_exit.append(walked_distance_destination)
-                    trip_first_possible_run = False
-
-    return precomputed_blocks_dict, walked_distance_entrance, walked_distance_exit
+    return blocks_by_trip_and_run_pair
 
 
 def compute_one_likelihood_block(
-    data: Data, param: dict, trip_id: int, boarded_run: int, headway_run: int
+    data: Data,
+    param: dict,
+    trip_id: int,
+    boarded_run: str,
+    headway_run: str,
+    time_distribution_assumption: str,
 ) -> float:
-    """Compute and return likelihood terms independant from f2b
-    probabilities for trip_id."""
+    """Compute and return likelihood term for one trip, one headway run and one boarded run.
+    Offline computation."""
 
-    station_entry_time = data.AFC_df.loc[trip_id, "H_O"]
-    station_exit_time = data.AFC_df.loc[trip_id, "H_D"]
+    # Select with label index from trip_id would be better ?
+    print(data.trips.at[trip_id, "access_time"])
+    station_access_time = Timestamp(data.trips.at[trip_id, "access_time"])
+    station_egress_time = Timestamp(data.trips.at[trip_id, "egress_time"])
+    station_destination = data.trips.at[trip_id, "egress_station"]
 
-    walked_distance_O_upper_bound = (
-        param["walking_speed_mean"]
-        * (
-            data.AVL_df.loc[headway_run, data.station_origin + "_departure"]
-            - station_entry_time
-        ).total_seconds()
+    boarded_run_departure_origin_station = Timestamp(
+        data.runs_info[data.date, boarded_run, data.station_origin][1]
+    )
+    boarded_run_arrival_dest_station = Timestamp(
+        data.runs_info[data.date, boarded_run, data.station_origin][0]
     )
 
-    # Station entrance before the first run of the day.
-    if headway_run == 0:
-        walked_distance_O_lower_bound = 0
+    access_time_upper_bound = (
+        boarded_run_departure_origin_station - station_access_time
+    ).total_seconds()
 
+    #  TODO: get run immediately before headway run
     # Station entrance after the beginning of the headway.
-    elif (
-        data.AVL_df.loc[headway_run - 1, data.station_origin + "_departure"]
-        <= station_entry_time
-    ):
-        walked_distance_O_lower_bound = 0
+
+    before_headway_run_departure_time = Timestamp(0)  # TODO: affect !
+    if before_headway_run_departure_time - station_access_time < Timedelta(0):
+        access_time_lower_bound = 0
 
     # Station entrance before the beginning of the headway.
     else:
-        walked_distance_O_lower_bound = (
-            param["walking_speed_mean"]
-            * (
-                data.AVL_df.loc[headway_run - 1, data.station_origin + "_departure"]
-                - station_entry_time
-            ).total_seconds()
+        access_time_lower_bound = (
+            before_headway_run_departure_time - station_access_time
+        ).total_seconds()
+
+    egress_time = (
+        station_egress_time - boarded_run_arrival_dest_station
+    ).total_seconds()
+
+    if time_distribution_assumption == "gaussian":
+        access_proba_difference = bivariate_gaussian_CDF(
+            access_time_upper_bound,
+            param["gaussian"]["mean_access"],
+            param["gaussian"]["std_access"],
+            param["walking_speed_mean"],
+            param["gaussian"]["std_walking_speed_access"],
+            param["gaussian"]["covariance_access"],
+        ) - bivariate_gaussian_CDF(
+            access_time_lower_bound,
+            param["gaussian"]["mean_access"],
+            param["gaussian"]["std_access"],
+            param["walking_speed_mean"],
+            param["gaussian"]["std_walking_speed_access"],
+            param["gaussian"]["covariance_access"],
         )
 
-    walk_distance_diff = gaussian_CDF(
-        walked_distance_O_upper_bound,
-        param["gaussian"]["mean_access"],
-        param["gaussian"]["std_access"],
-    ) - gaussian_CDF(
-        walked_distance_O_lower_bound,
-        param["gaussian"]["mean_access"],
-        param["gaussian"]["std_access"],
-    )
+        egress_proba = bivariate_gaussian_PDF(
+            egress_time,
+            param["gaussian"]["mean_egress"],
+            param["gaussian"]["std_egress"],
+            param["walking_speed_mean"],
+            param["gaussian"]["std_walking_speed_egress"],
+            param["gaussian"]["covariance_egress"],
+        )
 
-    walked_distance_destination = (
-        param["walking_speed_mean"]
-        * (
-            station_exit_time
-            - data.AVL_df.loc[boarded_run, data.station_destination + "_arrival"]
-        ).total_seconds()
-    )
-    walk_distance_exit = gaussian_PDF(
-        walked_distance_destination,
-        param["gaussian"]["mean_egress"],
-        param["gaussian"]["std_egress"],
-    )
+    if time_distribution_assumption == "log_normal":
+        access_proba_diff = log_normal_quotient_CDF(
+            access_time_upper_bound,
+            param["log_normal"]["mean_access_time"],
+            param["log_normal"]["std_access_time"],
+        )
 
-    return (
-        param["walking_speed_mean"] * walk_distance_exit * walk_distance_diff,
-        walked_distance_O_upper_bound,
-        walked_distance_destination,
-    )
+        if access_time_lower_bound > 0:
+            access_proba_diff -= log_normal_quotient_CDF(
+                access_time_lower_bound,
+                param["log_normal"]["mean_access_time"],
+                param["log_normal"]["std_access_time"],
+            )
+
+        egress_proba = log_normal_quotient_PDF(
+            egress_time,
+            param["log_normal"]["mean_egress_time"],
+            param["log_normal"]["std_egress_time"],
+        )
+
+    return egress_proba * access_proba_difference
 
 
 def compute_one_likelihood_block_distributed(
@@ -323,131 +246,6 @@ def likelihood_block_integrand(
     return speed * walk_distance_exit * walk_distance_diff
 
 
-def compute_one_likelihood_block_time_distribution_gaussian(
-    data: Data, param: dict, trip_id: int, boarded_run: int, headway_run: int
-) -> float:
-    """Compute and return likelihood terms independant from f2b probabilities
-    for trip_id, relying on bivariate gaussian distributions for access
-    and egress time."""
-
-    station_entry_time = data.AFC_df.loc[trip_id, "H_O"]
-    station_exit_time = data.AFC_df.loc[trip_id, "H_D"]
-
-    access_time_upper_bound = (
-        data.AVL_df.loc[headway_run, data.station_origin + "_departure"]
-        - station_entry_time
-    ).total_seconds()
-
-    # Station entrance before the first run of the day.
-    if headway_run == 0:
-        access_time_lower_bound = 0
-
-    else:
-        access_time_lower_bound = max(
-            0,
-            (
-                data.AVL_df.loc[headway_run - 1, data.station_origin + "_departure"]
-                - station_entry_time
-            ).total_seconds(),
-        )
-
-    access_time_diff = bivariate_gaussian_CDF(
-        access_time_upper_bound,
-        param["gaussian"]["mean_access"],
-        param["gaussian"]["std_access"],
-        param["walking_speed_mean"],
-        param["gaussian"]["std_walking_speed_access"],
-        param["gaussian"]["covariance_access"],
-    ) - bivariate_gaussian_CDF(
-        access_time_lower_bound,
-        param["gaussian"]["mean_access"],
-        param["gaussian"]["std_access"],
-        param["walking_speed_mean"],
-        param["gaussian"]["std_walking_speed_access"],
-        param["gaussian"]["covariance_access"],
-    )
-
-    egress_time = (
-        station_exit_time
-        - data.AVL_df.loc[boarded_run, data.station_destination + "_arrival"]
-    ).total_seconds()
-
-    egress_time_distribution = bivariate_gaussian_PDF(
-        egress_time,
-        param["gaussian"]["mean_egress"],
-        param["gaussian"]["std_egress"],
-        param["walking_speed_mean"],
-        param["gaussian"]["std_walking_speed_egress"],
-        param["gaussian"]["covariance_egress"],
-    )
-
-    return (
-        egress_time_distribution * access_time_diff,
-        access_time_upper_bound,
-        egress_time,
-    )
-
-
-def compute_one_likelihood_block_time_distribution_lognormal(
-    data: Data, param: dict, trip_id: int, boarded_run: int, headway_run: int
-) -> float:
-    """Compute and return likelihood terms independant from f2b probabilities
-    for trip_id, relying on lognormal distributions for access and egress time."""
-
-    station_entry_time = data.AFC_df.loc[trip_id, "H_O"]
-    station_exit_time = data.AFC_df.loc[trip_id, "H_D"]
-
-    access_time_upper_bound = (
-        data.AVL_df.loc[headway_run, data.station_origin + "_departure"]
-        - station_entry_time
-    ).total_seconds()
-
-    # Station entrance before the first run of the day.
-    if headway_run == 0:
-        access_time_lower_bound = 0
-
-    else:
-        access_time_lower_bound = (
-            data.AVL_df.loc[headway_run - 1, data.station_origin + "_departure"]
-            - station_entry_time
-        ).total_seconds()
-
-    # access_time_lower_bound = max(16, access_time_lower_bound)
-    # access_time_upper_bound = max(16, access_time_upper_bound)
-
-    access_time_diff = log_normal_quotient_CDF(
-        access_time_upper_bound,
-        param["log_normal"]["mean_access_time"],
-        param["log_normal"]["std_access_time"],
-    )
-
-    if access_time_lower_bound > 0:
-        access_time_diff -= log_normal_quotient_CDF(
-            access_time_lower_bound,
-            param["log_normal"]["mean_access_time"],
-            param["log_normal"]["std_access_time"],
-        )
-
-    egress_time = (
-        station_exit_time
-        - data.AVL_df.loc[boarded_run, data.station_destination + "_arrival"]
-    ).total_seconds()
-
-    # egress_time = max(16, egress_time)
-
-    egress_time_distribution = log_normal_quotient_PDF(
-        egress_time,
-        param["log_normal"]["mean_egress_time"],
-        param["log_normal"]["std_egress_time"],
-    )
-
-    return (
-        egress_time_distribution * access_time_diff,
-        access_time_upper_bound,
-        egress_time,
-    )
-
-
 # ---------------------------------------------------------------------------------------
 #
 #                                  Inline computations
@@ -529,84 +327,21 @@ def transition_probability(
 
 
 if __name__ == "__main__":
-    PATHS = "data/AVL-AFC-2015/"
-    station_origin = "VINCENNES"
-    station_destination = "LA_DEFENSE_GRANDE_ARCHE"
-    date = "2015-03-16"
+    station_origin = "VIN"
+    stations_destination = ["NAT", "LYO"]
+    date = "03/02/2020"
     direction = "west"
-    distributed_speed = False
-    time_distribution = True
 
-    plot = True
-    initialization = True
+    initialization = False
 
-    param = read_parameters()
-    data = Data(PATHS, date, direction, station_origin, station_destination)
+    with open("parameters.yml", "r") as file:
+        param = safe_load(file)
+
+    data = Data(date, direction, station_origin, stations_destination)
 
     # Offline precomputations.
-    data.compute_feasible_runs()
 
-    (
-        precomputed_likelihood_blocks,
-        walking_distance_entrance,
-        walking_distance_exit,
-    ) = compute_likelihood_blocks(data, param, distributed_speed, time_distribution)
-
-    with open("tests/blocks.txt", "w") as file:
-        file.write(str((precomputed_likelihood_blocks)))
-
-    with open("tests/access_time.txt", "w") as file:
-        file.write(str((walking_distance_entrance)))
-
-    with open("tests/egress_time.txt", "w") as file:
-        file.write(str((walking_distance_exit)))
-
-    # Plot walking distance distribution from data, and probability exponential law.
-    if plot:
-        n_bins = 100
-        fig, axs = pyplot.subplots(1, 2)
-
-        axs[0].hist(walking_distance_entrance, bins=n_bins, range=[0, 400])
-
-        ax01 = axs[0].twinx()
-        distance = linspace(0, 400, 400)
-        ax01.plot(
-            distance,
-            [
-                bivariate_gaussian_PDF(
-                    y,
-                    param["gaussian"]["mean_access"],
-                    param["gaussian"]["std_access"],
-                    param["walking_speed_mean"],
-                    param["gaussian"]["std_walking_speed_access"],
-                    param["gaussian"]["covariance_access"],
-                )
-                for y in distance
-            ],
-            color="orange",
-        )
-
-        axs[1].hist(walking_distance_exit, bins=n_bins, range=[0, 750])
-        ax11 = axs[1].twinx()
-
-        distance = linspace(0, 750, 750)
-        ax11.plot(
-            distance,
-            [
-                bivariate_gaussian_PDF(
-                    y,
-                    param["gaussian"]["mean_egress"],
-                    param["gaussian"]["std_egress"],
-                    param["walking_speed_mean"],
-                    param["gaussian"]["std_walking_speed_egress"],
-                    param["gaussian"]["covariance_egress"],
-                )
-                for y in distance
-            ],
-            color="orange",
-        )
-
-        pyplot.show()
+    likelihood_blocks = compute_likelihood_blocks(data, param, False, "gaussian")
 
     # Initialize f2b proba for tests.
     if initialization:

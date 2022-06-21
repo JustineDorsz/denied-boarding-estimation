@@ -6,4 +6,3 @@ pandas
 pyyaml
 scipy==1.8.0
 tqdm
-

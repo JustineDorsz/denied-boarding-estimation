@@ -16,6 +16,7 @@ from pandas import DataFrame
 # --------------------------------------------------------------------------------
 
 DB_PATH = "/home/justine/Cired/Data/AFC_AVL_2020_02/RERA_202002.db"
+AVL_DIRECTIONS = {"west": "P", "est": "I"}
 
 
 def create_connection(db_file: str) -> Connection:
@@ -117,7 +118,7 @@ def get_feasible_runs_for_one_trip(db_path: str, trip_id: int) -> list:
     return runs
 
 
-def get_run_info(db_path: str, date: str, run: str, stations: list):
+def get_run_arrivals(db_path: str, date: str, run: str, stations: list):
     conn = create_connection(db_path)
     cur = conn.cursor()
     try:
@@ -139,10 +140,27 @@ def get_run_info(db_path: str, date: str, run: str, stations: list):
             + '" AND "event" = "A"'
         )
         try:
-            station_arrival = cur.fetchall()[0][0]
-        except IndexError:
+            (station_arrival,) = cur.fetchone()
+        except TypeError:  # no arrival record at this station
             station_arrival = None
 
+        run_info[date, run, station] = station_arrival
+
+    cur.close()
+    conn.close()
+    return run_info
+
+
+def get_run_departures(db_path: str, date: str, run: str, stations: list):
+    conn = create_connection(db_path)
+    cur = conn.cursor()
+    try:
+        cur.execute("CREATE INDEX date_run_station ON avl(date, run, station)")
+    except OperationalError:
+        pass
+
+    run_departures = {}
+    for station in stations:
         cur.execute(
             "SELECT time "
             + "FROM avl "
@@ -155,19 +173,102 @@ def get_run_info(db_path: str, date: str, run: str, stations: list):
             + '" AND "event" = "D"'
         )
         try:
-            station_departure = cur.fetchall()[0][0]
-        except IndexError:
+            (station_departure,) = cur.fetchone()
+        except TypeError:  # no departure record at this station
             station_departure = None
 
-        run_info[date, run, station] = (station_arrival, station_departure)
+        run_departures[date, run, station] = station_departure
 
-    return run_info
+    cur.close()
+    conn.close()
+    return run_departures
+
+
+def get_previous_run(
+    db_path: str,
+    date: str,
+    run: str,
+    station_origin: str,
+    station_destination: str,
+):
+    conn = create_connection(db_path)
+    cur = conn.cursor()
+
+    query_departure_time_direction = (
+        "SELECT time, direction FROM avl "
+        + "WHERE "
+        + '"date" = "'
+        + date
+        + '" AND '
+        + '"station" = "'
+        + station_origin
+        + '" AND '
+        + '"run" = "'
+        + run
+        + '" AND '
+        + '"event" = "D"'
+    )
+    cur.execute(query_departure_time_direction)
+    (departure_time, direction) = cur.fetchone()
+
+    query_select_candidate_runs_departure = (
+        "SELECT run FROM avl "
+        + "WHERE "
+        + '"date" = "'
+        + date
+        + '" AND '
+        + '"station" = "'
+        + station_origin
+        + '"AND '
+        + '"run" != "      " '
+        + "AND "
+        + '"direction" = "'
+        + direction
+        + '" AND '
+        + '"event" = "D" AND '
+        + '"time" < "'
+        + departure_time
+        + '" '
+        + "ORDER BY time DESC"
+    )
+    cur.execute(query_select_candidate_runs_departure)
+    candidate_runs_departure = cur.fetchall()
+
+    query_select_candidate_runs_arrival = (
+        "SELECT run FROM avl "
+        + "WHERE "
+        + '"date" = "'
+        + date
+        + '" AND '
+        + '"station" = "'
+        + station_destination
+        + '"AND '
+        + '"run" != "      " '
+        + "AND "
+        + '"direction" = "'
+        + direction
+        + '" AND '
+        + '"event" = "A" '
+    )
+
+    cur.execute(query_select_candidate_runs_arrival)
+    candidate_runs_arrival = cur.fetchall()
+
+    previous_run = None
+    for (run,) in candidate_runs_departure:
+        if (run,) in candidate_runs_arrival:
+            previous_run = run
+            break
+
+    cur.close()
+    conn.close()
+    return previous_run
 
 
 if __name__ == "__main__":
     start_time = time()
     db_path = "/home/justine/Cired/Data/AFC_AVL_2020_02/RERA_202002.db"
     # selection = get_trips_filtered_by(db_path, time_slot_begin="13:05:20")
-    selection = get_run_info(db_path, "03/02/2020", "ZEBU01", ["NAV", "RUE"])
+    selection = get_previous_run(db_path, "01/02/2020", "UBOS39", "VIN", "NAT")
     print(selection)
     print(f"Execution time: {time() - start_time}s.")

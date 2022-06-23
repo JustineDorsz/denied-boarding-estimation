@@ -8,7 +8,6 @@ __date__ = "2022-02-11"
 
 from time import time
 
-from matplotlib import pyplot
 from numpy import linspace, log
 from pandas import Timedelta, Timestamp
 from scipy.integrate import quad
@@ -78,35 +77,41 @@ def compute_one_likelihood_block(
     """Compute and return likelihood term for one trip, one headway run and one boarded run.
     Offline computation."""
 
-    # Select with label index from trip_id would be better ?
-    print(data.trips.at[trip_id, "access_time"])
     station_access_time = Timestamp(data.trips.at[trip_id, "access_time"])
     station_egress_time = Timestamp(data.trips.at[trip_id, "egress_time"])
+
     station_destination = data.trips.at[trip_id, "egress_station"]
 
-    boarded_run_departure_origin_station = Timestamp(
-        data.runs_info[data.date, boarded_run, data.station_origin][1]
+    headway_run_departure_origin_station = Timestamp(
+        data.runs_departures[data.date, headway_run, data.station_origin]
     )
     boarded_run_arrival_dest_station = Timestamp(
-        data.runs_info[data.date, boarded_run, data.station_origin][0]
+        data.runs_arrivals[data.date, boarded_run, station_destination]
     )
 
     access_time_upper_bound = (
-        boarded_run_departure_origin_station - station_access_time
+        headway_run_departure_origin_station - station_access_time
     ).total_seconds()
 
-    #  TODO: get run immediately before headway run
-    # Station entrance after the beginning of the headway.
+    access_time_lower_bound = 0
 
-    before_headway_run_departure_time = Timestamp(0)  # TODO: affect !
-    if before_headway_run_departure_time - station_access_time < Timedelta(0):
-        access_time_lower_bound = 0
+    headway_previous_run = data.previous_run[date, headway_run]
+    if headway_previous_run:
+        try:
+            headway_previous_run_departure_time = Timestamp(
+                data.runs_departures[
+                    data.date, headway_previous_run, data.station_origin
+                ]
+            )
+            access_time_lower_bound = max(
+                0,
+                (
+                    headway_previous_run_departure_time - station_access_time
+                ).total_seconds(),
+            )  # max in case station entrance after the departure of headway_previous_run
 
-    # Station entrance before the beginning of the headway.
-    else:
-        access_time_lower_bound = (
-            before_headway_run_departure_time - station_access_time
-        ).total_seconds()
+        except KeyError:  # runs feasible for no trips, information missing
+            pass
 
     egress_time = (
         station_egress_time - boarded_run_arrival_dest_station
@@ -161,89 +166,89 @@ def compute_one_likelihood_block(
     return egress_proba * access_proba_difference
 
 
-def compute_one_likelihood_block_distributed(
-    data: Data, param: dict, trip_id: int, boarded_run: int, headway_run: int
-) -> float:
-    """Compute and return likelihood terms independant from f2b
-    probabilities for trip_id, integrated over the speed distribution"""
+# def compute_one_likelihood_block_distributed(
+#     data: Data, param: dict, trip_id: int, boarded_run: int, headway_run: int
+# ) -> float:
+#     """Compute and return likelihood terms independant from f2b
+#     probabilities for trip_id, integrated over the speed distribution"""
 
-    station_entry_time = data.AFC_df.loc[trip_id, "H_O"]
-    station_exit_time = data.AFC_df.loc[trip_id, "H_D"]
-    walked_time_O_upper_bound = (
-        data.AVL_df.loc[headway_run, data.station_origin + "_departure"]
-        - station_entry_time
-    ).total_seconds()
+#     station_entry_time = data.AFC_df.loc[trip_id, "H_O"]
+#     station_exit_time = data.AFC_df.loc[trip_id, "H_D"]
+#     walked_time_O_upper_bound = (
+#         data.AVL_df.loc[headway_run, data.station_origin + "_departure"]
+#         - station_entry_time
+#     ).total_seconds()
 
-    # Station entrance before the first run of the day.
-    if headway_run == 0:
-        walked_time_O_lower_bound = 0
+#     # Station entrance before the first run of the day.
+#     if headway_run == 0:
+#         walked_time_O_lower_bound = 0
 
-    # Station entrance after the beginning of the headway.
-    elif (
-        data.AVL_df.loc[headway_run - 1, data.station_origin + "_departure"]
-        <= station_entry_time
-    ):
-        walked_time_O_lower_bound = 0
+#     # Station entrance after the beginning of the headway.
+#     elif (
+#         data.AVL_df.loc[headway_run - 1, data.station_origin + "_departure"]
+#         <= station_entry_time
+#     ):
+#         walked_time_O_lower_bound = 0
 
-    # Station entrance before the beginning of the headway.
-    else:
-        walked_time_O_lower_bound = (
-            data.AVL_df.loc[headway_run - 1, data.station_origin + "_departure"]
-            - station_entry_time
-        ).total_seconds()
+#     # Station entrance before the beginning of the headway.
+#     else:
+#         walked_time_O_lower_bound = (
+#             data.AVL_df.loc[headway_run - 1, data.station_origin + "_departure"]
+#             - station_entry_time
+#         ).total_seconds()
 
-    walked_time_destination = (
-        station_exit_time
-        - data.AVL_df.loc[boarded_run, data.station_destination + "_arrival"]
-    ).total_seconds()
+#     walked_time_destination = (
+#         station_exit_time
+#         - data.AVL_df.loc[boarded_run, data.station_destination + "_arrival"]
+#     ).total_seconds()
 
-    return quad(
-        likelihood_block_integrand,
-        0,
-        1,
-        args=(
-            param,
-            walked_time_O_upper_bound,
-            walked_time_O_lower_bound,
-            walked_time_destination,
-        ),
-    )[0]
+#     return quad(
+#         likelihood_block_integrand,
+#         0,
+#         1,
+#         args=(
+#             param,
+#             walked_time_O_upper_bound,
+#             walked_time_O_lower_bound,
+#             walked_time_destination,
+#         ),
+#     )[0]
 
 
-def likelihood_block_integrand(
-    w: float,
-    param: dict,
-    walked_time_O_upper_bound: float,
-    walked_time_O_lower_bound: float,
-    walked_time_destination: float,
-):
-    """Compute likelihood integrand term depending on integration variable w."""
-    speed = norm.ppf(
-        w, param["walking_speed_mean"], param["gaussian"]["std_walking_speed_access"]
-    )
+# def likelihood_block_integrand(
+#     w: float,
+#     param: dict,
+#     walked_time_O_upper_bound: float,
+#     walked_time_O_lower_bound: float,
+#     walked_time_destination: float,
+# ):
+#     """Compute likelihood integrand term depending on integration variable w."""
+#     speed = norm.ppf(
+#         w, param["walking_speed_mean"], param["gaussian"]["std_walking_speed_access"]
+#     )
 
-    walked_distance_O_upper_bound = speed * walked_time_O_upper_bound
-    walked_distance_O_lower_bound = speed * walked_time_O_lower_bound
+#     walked_distance_O_upper_bound = speed * walked_time_O_upper_bound
+#     walked_distance_O_lower_bound = speed * walked_time_O_lower_bound
 
-    walk_distance_diff = gaussian_CDF(
-        walked_distance_O_upper_bound,
-        param["gaussian"]["mean_access"],
-        param["gaussian"]["std_access"],
-    ) - gaussian_CDF(
-        walked_distance_O_lower_bound,
-        param["gaussian"]["mean_access"],
-        param["gaussian"]["std_access"],
-    )
+#     walk_distance_diff = gaussian_CDF(
+#         walked_distance_O_upper_bound,
+#         param["gaussian"]["mean_access"],
+#         param["gaussian"]["std_access"],
+#     ) - gaussian_CDF(
+#         walked_distance_O_lower_bound,
+#         param["gaussian"]["mean_access"],
+#         param["gaussian"]["std_access"],
+#     )
 
-    walked_distance_destination = speed * walked_time_destination
+#     walked_distance_destination = speed * walked_time_destination
 
-    walk_distance_exit = gaussian_PDF(
-        walked_distance_destination,
-        param["gaussian"]["mean_egress"],
-        param["gaussian"]["std_egress"],
-    )
+#     walk_distance_exit = gaussian_PDF(
+#         walked_distance_destination,
+#         param["gaussian"]["mean_egress"],
+#         param["gaussian"]["std_egress"],
+#     )
 
-    return speed * walk_distance_exit * walk_distance_diff
+#     return speed * walk_distance_exit * walk_distance_diff
 
 
 # ---------------------------------------------------------------------------------------
@@ -342,17 +347,18 @@ if __name__ == "__main__":
     # Offline precomputations.
 
     likelihood_blocks = compute_likelihood_blocks(data, param, False, "gaussian")
+    print(likelihood_blocks)
 
     # Initialize f2b proba for tests.
     if initialization:
         initial_probability_range = linspace(0, 1, 50)
         objective_values = []
         for initial_probability in initial_probability_range:
-            f2b_probabilities = [initial_probability for i in range(data.mission_nbr)]
+            f2b_probabilities = [initial_probability for _ in range(data.mission_nbr)]
             start_time = time()
             objective_values.append(
                 minus_log_likelihood_global(
-                    f2b_probabilities, [0], data, precomputed_likelihood_blocks
+                    f2b_probabilities, [0], data, likelihood_blocks
                 )
             )
             print(

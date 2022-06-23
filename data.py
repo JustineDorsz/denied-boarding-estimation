@@ -7,7 +7,6 @@ __date__ = "2022-03-04"
 
 from time import time
 from pandas import concat
-from tqdm import tqdm
 
 import db
 
@@ -33,31 +32,79 @@ class Data:
         self.possible_stations_destination = possible_station_destination
         self.db_path = DB_PATH
 
-        #  loop on possible destinations
-        for station_destination in possible_station_destination:
+        self._get_all_trips()
+        self.trips = self.trips.set_index("id")
+
+        self._get_feasible_runs()
+
+        self._get_runs_info()
+
+        self._construct_feasible_run_pairs()
+
+    def _get_all_trips(self):
+        #  get trips by destination station
+        for station_destination in self.possible_stations_destination:
             trips_to_destination = db.get_trips_filtered_by(
-                self.db_path, date, station_origin, station_destination
+                self.db_path, self.date, self.station_origin, station_destination
             )
-            if station_destination == possible_station_destination[0]:
+            if station_destination == self.possible_stations_destination[0]:
                 self.trips = trips_to_destination
             else:
                 self.trips = concat([self.trips, trips_to_destination])
-        self.trips = self.trips.set_index("id")
 
+    def _get_feasible_runs(self):
         self.feasible_runs_by_trip = {}
         self.concerned_runs = []
         for trip_id in self.trips.index:
             feasible_runs = db.get_feasible_runs_for_one_trip(self.db_path, trip_id)
-            self.concerned_runs = list(set(self.concerned_runs) | set(feasible_runs))
             self.feasible_runs_by_trip[trip_id] = feasible_runs
 
-        self.runs_info = {}
-        stations = [station_origin] + possible_station_destination
-        for run in self.concerned_runs:
-            new_run_info = db.get_run_info(self.db_path, date, run, stations)
-            self.runs_info.update(new_run_info)
+            # Store tuples (run, origin, destination) in temporary attribute
+            # concerned_runs for the construction of previous_run,
+            # runs_arrivals and runs_departures in _get_runs_info.
+            trip_origin = self.trips.at[trip_id, "access_station"]
+            trip_destination = self.trips.at[trip_id, "egress_station"]
+            for feasible_run in feasible_runs:
+                if (
+                    feasible_run,
+                    trip_origin,
+                    trip_destination,
+                ) not in self.concerned_runs:
+                    self.concerned_runs += [
+                        (feasible_run, trip_origin, trip_destination)
+                    ]
 
-        self._construct_feasible_run_pairs()
+    def _get_runs_info(self):
+        self.previous_run = {}
+        self.runs_arrivals = {}
+        self.runs_departures = {}
+        concerned_runs_to_add = []  # for previous runs not yet in concerned runs
+        stations = [self.station_origin] + self.possible_stations_destination
+
+        for (run, origin, destination) in self.concerned_runs:
+            previous_run = db.get_previous_run(
+                self.db_path, self.date, run, origin, destination
+            )
+            self.previous_run[self.date, run] = previous_run
+            if previous_run:
+                if previous_run not in self.concerned_runs:
+                    concerned_runs_to_add.append(previous_run)
+            run_arrivals = db.get_run_arrivals(self.db_path, self.date, run, stations)
+            run_departures = db.get_run_departures(
+                self.db_path, self.date, run, stations
+            )
+            self.runs_arrivals.update(run_arrivals)
+            self.runs_departures.update(run_departures)
+
+        # if concerned_runs_to_add:
+        #     print("Found previous runs not in concerned runs...")
+        #     for run in concerned_runs_to_add:
+        #         run_arrivals = db.get_run_arrivals(self.db_path, date, run, stations)
+        #         run_departures = db.get_run_departures(
+        #             self.db_path, date, run, stations
+        #         )
+        #         self.runs_arrivals.update(run_arrivals)
+        #         self.runs_departures.update(run_departures)
 
     def _construct_feasible_run_pairs(self):
         self.headway_boarded_run_pair_by_trip = {}
@@ -74,10 +121,10 @@ class Data:
 
                     # Compare runs departure time of each possible pair
                     # to store in order (headway_run, boarded_run).
-                    departure_time_left_term = self.runs_info[
+                    departure_time_left_term = self.runs_departures[
                         self.date, pair_left, self.station_origin
                     ][1]
-                    departure_time_right_term = self.runs_info[
+                    departure_time_right_term = self.runs_departures[
                         self.date, pair_right, self.station_origin
                     ][1]
                     if (

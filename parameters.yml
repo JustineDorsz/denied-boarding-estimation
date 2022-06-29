@@ -2,12 +2,6 @@
 
 walking_speed_mean : 1.2
 
-exponential:
-  lambda_access : 0.32
-  lambda_egress : 0.18
-  shift_access : 72
-  shift_egress : 264.30
-
 gaussian:
   mean_access: 67.1
   std_access : 15.5
@@ -17,9 +11,37 @@ gaussian:
   std_walking_speed_egress: 0.034
   covariance_access: -6.73
   covariance_egress: -2.81
+  VIN: 
+    distance_mean:
+    distance_std:
+    speed_mean:
+    speed_std:
+    covariance:
+  NAT: 
+    distance_mean:
+    distance_std:
+    speed_mean:
+    speed_std:
+    covariance:
+  LYO: 
+    distance_mean:
+    distance_std:
+    speed_mean:
+    speed_std:
+    covariance:
+
 
 log_normal:
   mean_access_time: 3.98
   std_access_time: 0.497
   mean_egress_time: 4.58
   std_egress_time: 0.308
+  VIN: 
+    time_mean:
+    time_std:
+  NAT: 
+    time_mean:
+    time_std:
+  LYO: 
+    time_mean:
+    time_std: 

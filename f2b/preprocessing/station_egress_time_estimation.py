@@ -80,18 +80,31 @@ class Data:
             ).seconds
 
 
-def egress_time_log_likelihood(x: float, distribution: str, parameters: list):
-    if distribution == "gaussian":
+def egress_time_log_likelihood(
+    x: float, distribution: str, parameters: list, fixed_values: list = None
+):
+    if distribution == "normal":
         time_mean = parameters[0]
         time_sd = parameters[1]
         return log(norm.pdf(x, loc=time_mean, scale=time_sd))
 
-    if distribution == "composed-bivariate-gaussian":
-        distance_mean = parameters[0]
-        distance_sd = parameters[1]
-        speed_mean = parameters[2]
-        speed_sd = parameters[3]
-        covariance = parameters[4]
+    if distribution == "bivariate-normal":
+        param_position = 0
+
+        distance_mean = parameters[param_position]
+        param_position += 1
+        distance_sd = parameters[param_position]
+        param_position += 1
+        try:
+            speed_mean = fixed_values[0]
+        except TypeError:
+            speed_mean = parameters[param_position]
+            param_position += 1
+
+        speed_sd = parameters[param_position]
+        param_position += 1
+        covariance = 0
+
         y_x = sqrt(distance_sd**2 + (x * speed_sd) ** 2 + -2 * x * covariance)
         phi = norm.pdf((x * speed_mean - distance_mean) / y_x)
         num = speed_mean * (distance_sd**2 - x * covariance) + distance_mean * (
@@ -109,30 +122,34 @@ def log_normal_distribution(x: float, parameters: list):
     return log(frac * phi)
 
 
-def minus_sum_log_likelihood(parameters: list, data: Data, distribution: str):
+def minus_sum_log_likelihood(
+    parameters: list, data: Data, distribution: str, fixed_values: list = None
+):
     total_minus_log_likelihood = 0
     for trip_id in data.trips_egress_times:
         egress_time = data.trips_egress_times[trip_id]
         total_minus_log_likelihood -= egress_time_log_likelihood(
-            egress_time, distribution, parameters
+            egress_time, distribution, parameters, fixed_values
         )
     print(total_minus_log_likelihood)
     return total_minus_log_likelihood
 
 
-def plot_distributions(data: Data, distribution: str, parameters: list):
+def plot_distributions(
+    data: Data, distribution: str, parameters: list, fixed_values: list = None
+):
     egress_time_list = list(data.trips_egress_times.values())
 
     egress_time_list.sort()
 
-    if distribution == "composed-log-normal":
+    if distribution == "bivariate-log-normal":
         egress_time_distribution = [
             exp(log_normal_distribution(x, parameters)) for x in egress_time_list
         ]
 
     else:
         egress_time_distribution = [
-            exp(egress_time_log_likelihood(x, distribution, parameters))
+            exp(egress_time_log_likelihood(x, distribution, parameters, fixed_values))
             for x in egress_time_list
         ]
     fig, ax = pyplot.subplots()
@@ -143,15 +160,15 @@ def plot_distributions(data: Data, distribution: str, parameters: list):
 
 
 if __name__ == "__main__":
-    station_estimation = "DEF"
+    station_estimation = "LYO"
     stations_origin = ["VIN"]
     dates = ["03/02/2020"]
 
     data = Data(station_estimation, dates, "west", stations_origin)
-    distribution = "composed-log-normal"
+    distribution = "bivariate-normal"
     print(len(data.trips_egress_times))
 
-    if distribution == "gaussian":
+    if distribution == "normal":
         parameters_optimal = optimize.minimize(
             minus_sum_log_likelihood,
             (112, 47),
@@ -160,21 +177,31 @@ if __name__ == "__main__":
         ).x
         print(parameters_optimal)
 
-    if distribution == "composed_bivariate_gaussian":
-        # log likelihood optimization
-        ...
+    if distribution == "bivariate-normal":
+        fixed_values = [1.2]
+        parameters_optimal = optimize.minimize(
+            minus_sum_log_likelihood,
+            (100, 20, 1.2, 0),
+            args=(data, distribution),
+            bounds=[(0, None), (0, None), (0, None), (0, None)],
+        ).x
+        print(parameters_optimal)
 
-    if distribution == "composed-log-normal":
+    if distribution == "bivariate-log-normal":
         egress_time_list = list(data.trips_egress_times.values())
-        print(egress_time_list)
         composed_mean = mean(log(egress_time_list))
         composed_sd = sqrt(
             mean([(time - composed_mean) ** 2 for time in log(egress_time_list)])
         )
         parameters_optimal = [composed_mean, composed_sd]
+        log_likelihood = -sum(
+            [
+                log_normal_distribution(egress_time, parameters_optimal)
+                for egress_time in egress_time_list
+            ]
+        )
+        print(log_likelihood)
         print(parameters_optimal)
-
-    plot_distributions(data, distribution, parameters_optimal)
 
 
 if WRITE_OUPUT:

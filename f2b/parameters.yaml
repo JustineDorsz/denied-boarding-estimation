@@ -1,0 +1,68 @@
+CHL: 
+  cauchy: 
+  loc: 94.8
+  scale: 17.9
+
+AUB: 
+  lognorm: 
+    s: 0.379
+    loc: 16.6
+    scale: 89.7
+
+ETO: 
+  chi2: 
+    df: 16.0
+    loc: 29.9
+    scale: 7.2
+
+DEF: 
+  lognorm: 
+    s: 0.31 
+    loc: -10.7
+    scale: 102.0
+
+NAP: 
+  rayleigh: 
+    loc: 0.636
+    scale: 57.6
+
+NAU: 
+  lognorm: 
+    s: 0.421
+    loc: 26.4
+    scale: 62.3
+
+NAV: 
+  gamma: 
+    a: 2.83
+    loc: 35.1
+    scale: 24.3
+
+RUE: 
+  chi2: 
+    df: 6.09
+    loc: 13.9
+    scale: 9.66
+
+CRO: 
+  rayleigh: 
+    loc: -0.715
+    scale: 44.3
+
+VES: 
+  gamma: 
+    a: 1.56
+    loc: 29.0
+    scale: 33.7
+
+PEC: 
+  lognorm: 
+    s: 0.579
+    loc: 14.8
+    scale: 39.6
+
+GER: 
+  gamma: 
+    a: 6.8
+    loc: 0.434
+    scale: 13.7

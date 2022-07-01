@@ -1,8 +1,10 @@
-matplotlib
+fitter
 ipykernel
+matplotlib
 numdifftools
 numpy
 pandas
 pyyaml
+sigfig
 scipy==1.8.0
 tqdm

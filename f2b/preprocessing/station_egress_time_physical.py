@@ -6,14 +6,13 @@ __date__ = "2022-06-29"
 
 from math import sqrt
 
+import f2b.db as db
 from matplotlib import pyplot
-from numpy import exp, log, mean
+from numdifftools import Hessian
+from numpy import exp, linalg, log, mean, ndarray, zeros
 from pandas import Timestamp, concat
 from scipy import optimize
 from scipy.stats import norm
-from yaml import safe_load
-
-import f2b.db as db
 
 DB_PATH = "/home/justine/Cired/Data/AFC_AVL_2020_02/RERA_202002.db"
 
@@ -28,8 +27,10 @@ class Data:
         direction: str,
         stations_origin: str,
     ):
-        """Load trips with one feasible run from database.
-        Compute egress time of each trip."""
+        """Load trips with one feasible run from database,
+        store in datadrame attribute self.trips.
+        Compute egress time of each trip,
+        store in dict attribute self.trips_egress_times."""
 
         self.dates = dates
         self.station_estimation = station_estimation
@@ -43,7 +44,7 @@ class Data:
 
         self._get_egress_times()
 
-    def _get_all_trips(self):
+    def _get_all_trips(self) -> None:
         for date in self.dates:
             for station_origin in self.stations_origin:
                 trips_to_destination = db.get_trips_filtered_by(
@@ -57,7 +58,7 @@ class Data:
                 else:
                     self.trips = concat([self.trips, trips_to_destination])
 
-    def _filter_trips_with_one_feasible_run(self):
+    def _filter_trips_with_one_feasible_run(self) -> None:
         self.feasible_run_by_trips = {}
         for trip_id in self.trips.index:
             feasible_runs = db.get_feasible_runs_for_one_trip(self.db_path, trip_id)
@@ -66,7 +67,7 @@ class Data:
             else:
                 self.trips.drop(trip_id, axis=0)
 
-    def _get_egress_times(self):
+    def _get_egress_times(self) -> None:
         self.trips_egress_times = {}
         for trip_id in self.feasible_run_by_trips:
             feasible_run = self.feasible_run_by_trips[trip_id]
@@ -81,8 +82,8 @@ class Data:
 
 
 def egress_time_log_likelihood(
-    x: float, distribution: str, parameters: list, fixed_values: list = None
-):
+    parameters: list, x: float, distribution: str, fixed_values: list = None
+) -> float:
     if distribution == "normal":
         time_mean = parameters[0]
         time_sd = parameters[1]
@@ -100,6 +101,9 @@ def egress_time_log_likelihood(
         except TypeError:
             speed_mean = parameters[param_position]
             param_position += 1
+        except IndexError:
+            speed_mean = parameters[param_position]
+            param_position += 1
 
         speed_sd = parameters[param_position]
         param_position += 1
@@ -114,7 +118,7 @@ def egress_time_log_likelihood(
         return log(num * phi / denom)
 
 
-def log_normal_distribution(x: float, parameters: list):
+def log_normal_distribution(x: float, parameters: list) -> float:
     composed_mean = parameters[0]
     composed_sd = parameters[1]
     frac = 1 / (composed_sd * x)
@@ -124,12 +128,12 @@ def log_normal_distribution(x: float, parameters: list):
 
 def minus_sum_log_likelihood(
     parameters: list, data: Data, distribution: str, fixed_values: list = None
-):
+) -> float:
     total_minus_log_likelihood = 0
     for trip_id in data.trips_egress_times:
         egress_time = data.trips_egress_times[trip_id]
         total_minus_log_likelihood -= egress_time_log_likelihood(
-            egress_time, distribution, parameters, fixed_values
+            parameters, egress_time, distribution, fixed_values
         )
     print(total_minus_log_likelihood)
     return total_minus_log_likelihood
@@ -149,7 +153,7 @@ def plot_distributions(
 
     else:
         egress_time_distribution = [
-            exp(egress_time_log_likelihood(x, distribution, parameters, fixed_values))
+            exp(egress_time_log_likelihood(parameters, x, distribution, fixed_values))
             for x in egress_time_list
         ]
     fig, ax = pyplot.subplots()
@@ -159,12 +163,25 @@ def plot_distributions(
     pyplot.show()
 
 
+def hessian_log_likelihood(
+    param: list, egress_times: list, distribution: str, values: list = None
+) -> ndarray:
+    hess = Hessian(egress_time_log_likelihood)
+
+    # initialization of a matrix of size param*param to store the sum of hessian contributions
+    sum_hessian = zeros((len(param), len(param)))
+    for x in egress_times:
+        sum_hessian = sum_hessian + hess(param, x, distribution, values)
+
+    return sum_hessian
+
+
 if __name__ == "__main__":
-    station_estimation = "LYO"
-    stations_origin = ["VIN"]
+    station_estimation = "VIN"
+    stations_origin = ["DEF"]
     dates = ["03/02/2020"]
 
-    data = Data(station_estimation, dates, "west", stations_origin)
+    data = Data(station_estimation, dates, "east", stations_origin)
     distribution = "bivariate-normal"
     print(len(data.trips_egress_times))
 
@@ -176,16 +193,26 @@ if __name__ == "__main__":
             bounds=[(0, None), (0, None)],
         ).x
         print(parameters_optimal)
+        # egress_times = list(data.trips_egress_times.values())
+        # print(hessian_log_likelihood(parameters_optimal, egress_times, distribution))
+        plot_distributions(data, distribution, parameters_optimal)
 
     if distribution == "bivariate-normal":
-        fixed_values = [1.2]
+        fixed_values = []
         parameters_optimal = optimize.minimize(
             minus_sum_log_likelihood,
-            (100, 20, 1.2, 0),
-            args=(data, distribution),
+            (100, 20, 1.2, 0.1),
+            args=(data, distribution, fixed_values),
             bounds=[(0, None), (0, None), (0, None), (0, None)],
         ).x
         print(parameters_optimal)
+        egress_times = list(data.trips_egress_times.values())
+        hessian_at_minimum = hessian_log_likelihood(
+            parameters_optimal, egress_times, distribution, fixed_values
+        )
+        print(hessian_at_minimum)
+        print(linalg.eigvals(hessian_at_minimum))
+        plot_distributions(data, distribution, parameters_optimal, fixed_values)
 
     if distribution == "bivariate-log-normal":
         egress_time_list = list(data.trips_egress_times.values())
@@ -202,6 +229,7 @@ if __name__ == "__main__":
         )
         print(log_likelihood)
         print(parameters_optimal)
+        plot_distributions(data, distribution, parameters_optimal)
 
 
 if WRITE_OUPUT:

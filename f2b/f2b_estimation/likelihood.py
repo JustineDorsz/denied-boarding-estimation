@@ -9,20 +9,12 @@ __date__ = "2022-02-11"
 from time import time
 
 from numpy import linspace, log
-from pandas import Timedelta, Timestamp
-from scipy.integrate import quad
-from scipy.stats import norm
+from pandas import Timestamp
 from tqdm import tqdm
+import scipy.stats
 from yaml import safe_load
 
-from data import Data
-
-from probability_laws import (
-    bivariate_gaussian_CDF,
-    bivariate_gaussian_PDF,
-    log_normal_quotient_CDF,
-    log_normal_quotient_PDF,
-)
+from f2b.f2b_estimation.data import Data
 
 # ---------------------------------------------------------------------------------------
 #
@@ -34,8 +26,6 @@ from probability_laws import (
 def compute_likelihood_blocks(
     data: Data,
     param: dict,
-    distributed_speed: bool = False,
-    time_distribution_assumption: str = None,
 ) -> dict:
     """Compute likelihood blocks for each couple of feasible headway and
     run per trip, and store the result in a dictionnary with tuple keys."""
@@ -43,26 +33,28 @@ def compute_likelihood_blocks(
     # Dictionnary with tuple index.
     blocks_by_trip_and_run_pair = {}
 
-    print("Computing blocks...")
+    print("(Offline) Compute likelihood blocks...")
     for trip_id in tqdm(data.trips.index):
-        for headway_boarded_pair in data.headway_boarded_run_pair_by_trip[trip_id]:
+        try:
+            headway_boarded_pairs = data.headway_boarded_run_pair_by_trip[trip_id]
+        # Skip trips with no feasible run.
+        except KeyError:
+            continue
 
+        for headway_boarded_pair in headway_boarded_pairs:
             # Pairs are ordered (headway_run, boarded_run)
             headway_run = headway_boarded_pair[0]
             boarded_run = headway_boarded_pair[1]
 
-            if time_distribution_assumption:
-                blocks_by_trip_and_run_pair[
-                    trip_id, headway_run, boarded_run
-                ] = compute_one_likelihood_block(
-                    data,
-                    param,
-                    trip_id,
-                    boarded_run,
-                    headway_run,
-                    time_distribution_assumption,
-                )
-
+            blocks_by_trip_and_run_pair[
+                trip_id, headway_run, boarded_run
+            ] = compute_one_likelihood_block(
+                data,
+                param,
+                trip_id,
+                boarded_run,
+                headway_run,
+            )
     return blocks_by_trip_and_run_pair
 
 
@@ -72,36 +64,50 @@ def compute_one_likelihood_block(
     trip_id: int,
     boarded_run: str,
     headway_run: str,
-    time_distribution_assumption: str,
 ) -> float:
     """Compute and return likelihood term for one trip, one headway run and one boarded run.
     Offline computation."""
 
+    # Get distributions and distributions parameters of walking duration, in origin and
+    # destination station, stored in param.
+    destination_station = data.trips.at[trip_id, "egress_station"]
+    station_access_distrib_name = param[data.origin_station]["distribution"]
+    station_access_duration_distribution = eval(
+        "scipy.stats." + station_access_distrib_name
+    )
+    station_access_duration_distribution_params = param[data.origin_station][
+        "parameters"
+    ]
+    station_access_distrib_name = param[destination_station]["distribution"]
+    station_egress_duration_distribution = eval(
+        "scipy.stats." + station_access_distrib_name
+    )
+    station_egress_duration_distribution_params = param[destination_station][
+        "parameters"
+    ]
+    #  Get individual trips access and egress time, runs arrival and departure times.
     station_access_time = Timestamp(data.trips.at[trip_id, "access_time"])
     station_egress_time = Timestamp(data.trips.at[trip_id, "egress_time"])
-    station_destination = data.trips.at[trip_id, "egress_station"]
     headway_run_departure_origin_station = Timestamp(
-        data.runs_departures[data.date, headway_run, data.station_origin]
+        data.runs_departures[headway_run, data.origin_station]
     )
     boarded_run_arrival_dest_station = Timestamp(
-        data.runs_arrivals[data.date, boarded_run, station_destination]
+        data.runs_arrivals[boarded_run, destination_station]
     )
 
-    access_time_upper_bound = (
+    access_duration_upper_bound = (
         headway_run_departure_origin_station - station_access_time
     ).total_seconds()
 
-    access_time_lower_bound = 0
+    access_duration_lower_bound = 0
 
-    headway_previous_run = data.previous_run[date, headway_run]
+    headway_previous_run = data.previous_run[headway_run, destination_station]
     if headway_previous_run:
         try:
             headway_previous_run_departure_time = Timestamp(
-                data.runs_departures[
-                    data.date, headway_previous_run, data.station_origin
-                ]
+                data.runs_departures[headway_previous_run, data.origin_station]
             )
-            access_time_lower_bound = max(
+            access_duration_lower_bound = max(
                 0,
                 (
                     headway_previous_run_departure_time - station_access_time
@@ -111,56 +117,20 @@ def compute_one_likelihood_block(
         except KeyError:  # runs feasible for no trips, information missing
             pass
 
-    egress_time = (
+    egress_duration = (
         station_egress_time - boarded_run_arrival_dest_station
     ).total_seconds()
 
-    if time_distribution_assumption == "gaussian":
-        access_proba_difference = bivariate_gaussian_CDF(
-            access_time_upper_bound,
-            param["gaussian"][data.station_origin]["distance_mean"],
-            param["gaussian"][data.station_origin]["distance_std"],
-            param["gaussian"][data.station_origin]["speed_mean"],
-            param["gaussian"][data.station_origin]["speed_std"],
-            param["gaussian"][data.station_origin]["covariance"],
-        ) - bivariate_gaussian_CDF(
-            access_time_lower_bound,
-            param["gaussian"][data.station_origin]["distance_mean"],
-            param["gaussian"][data.station_origin]["distance_std"],
-            param["gaussian"][data.station_origin]["speed_mean"],
-            param["gaussian"][data.station_origin]["speed_std"],
-            param["gaussian"][data.station_origin]["covariance"],
-        )
+    # Compute joint trip with headway and feasible run probability.
+    access_proba_difference = station_access_duration_distribution.cdf(
+        access_duration_upper_bound, **station_access_duration_distribution_params
+    ) - station_access_duration_distribution.cdf(
+        access_duration_lower_bound, **station_access_duration_distribution_params
+    )
 
-        egress_proba = bivariate_gaussian_PDF(
-            egress_time,
-            param["gaussian"][station_destination]["distance_mean"],
-            param["gaussian"][station_destination]["distance_std"],
-            param["gaussian"][station_destination]["speed_mean"],
-            param["gaussian"][station_destination]["speed_std"],
-            param["gaussian"][station_destination]["covariance"],
-        )
-
-    if time_distribution_assumption == "log_normal":
-        access_proba_diff = log_normal_quotient_CDF(
-            access_time_upper_bound,
-            param["log_normal"][data.station_origin]["time_mean"],
-            param["log_normal"][data.station_origin]["time_std"],
-        )
-
-        if access_time_lower_bound > 0:
-            access_proba_diff -= log_normal_quotient_CDF(
-                access_time_lower_bound,
-                param["log_normal"][data.station_origin]["time_mean"],
-                param["log_normal"][data.station_origin]["time_std"],
-            )
-
-        egress_proba = log_normal_quotient_PDF(
-            egress_time,
-            param["log_normal"][station_destination]["time_mean"],
-            param["log_normal"][station_destination]["time_std"],
-        )
-
+    egress_proba = station_egress_duration_distribution.pdf(
+        egress_duration, **station_egress_duration_distribution_params
+    )
     return egress_proba * access_proba_difference
 
 
@@ -192,11 +162,11 @@ def log_likelihood_global(
 ) -> float:
     """Compute and return the sum of the individual log-likelihoods."""
 
-    data.AFC_df["Log-likelihood"] = data.AFC_df["index"].apply(
+    data.trips["log-likelihood"] = data.trips["index"].apply(
         compute_log_likelihood_indiv,
         args=(data, precomputed_blocks, f2b_probabilities),
     )
-    return data.AFC_df["Log-likelihood"].sum()
+    return data.trips["log-likelihood"].sum()
 
 
 def compute_log_likelihood_indiv(
@@ -207,75 +177,148 @@ def compute_log_likelihood_indiv(
 ) -> None:
     """Compute the individual log-likelihood for trip_id and store in data_AFC."""
 
-    first_feasible_run = data.feasible_runs_dict["first_feasible_run", trip_id]
-    last_feasible_run = data.feasible_runs_dict["last_feasible_run", trip_id]
+    conditional_exit_duration_proba = 0
 
-    exit_time_PDF = 0.0
-    # another...
-    for boarded_run in range(first_feasible_run, last_feasible_run + 1):
-        for headway_run in range(first_feasible_run, boarded_run + 1):
-
-            block = precomputed_blocks[trip_id, headway_run, boarded_run]
-            exit_time_PDF += (
-                transition_probability(boarded_run, headway_run, f2b_probabilities)
-                * block
+    for headway_boarded_pair in data.headway_boarded_run_pair_by_trip[trip_id]:
+        # Pairs are ordered (headway_run, boarded_run)
+        headway_run = headway_boarded_pair[0]
+        boarded_run = headway_boarded_pair[1]
+        block = precomputed_blocks[trip_id, headway_run, boarded_run]
+        conditional_exit_duration_proba += (
+            transition_probability(
+                trip_id, data, boarded_run, headway_run, f2b_probabilities
             )
+            * block
+        )
 
-    # Artificial to avoid 0 in log --> shouldn't be needed !!
-    # if abs(exit_time_PDF) < 1.0e-60:
-    # exit_time_PDF += 1.0e-60
-
-    return log(exit_time_PDF)
+    return log(conditional_exit_duration_proba)
 
 
 def transition_probability(
-    boarded_run: int, headway_run: int, f2b_probabilities: list
+    trip_id: int,
+    data: Data,
+    boarded_run: str,
+    headway_run: str,
+    f2b_probabilities: list,
 ) -> float:
     """Function returning the probability of boarding boarded_run
     when arriving at headway_run according to the f2b_probability."""
 
-    if headway_run == boarded_run:
-        return 1 - f2b_probabilities[headway_run]
+    headway_run_index = data.runs.index(headway_run)
+    boarded_run_index = data.runs.index(boarded_run)
 
-    elif boarded_run > headway_run:
+    if headway_run == boarded_run:
+        return 1 - f2b_probabilities[headway_run_index]
+
+    else:
         failure_probability = 1
-        for run in range(headway_run, boarded_run):
-            failure_probability = f2b_probabilities[run] * failure_probability
-        return (1 - f2b_probabilities[boarded_run]) * failure_probability
+
+        # relative indexing in the list of feasible runs in
+        # chronological order for each trip.
+        trip_headway_run_relative_index = data.feasible_runs_by_trip[trip_id].index(
+            headway_run
+        )
+        trip_boarded_run_relative_index = data.feasible_runs_by_trip[trip_id].index(
+            boarded_run
+        )
+
+        for missed_run in data.feasible_runs_by_trip[trip_id][
+            trip_headway_run_relative_index:trip_boarded_run_relative_index
+        ]:
+            missed_run_index = data.runs.index(missed_run)
+            failure_probability = (
+                f2b_probabilities[missed_run_index] * failure_probability
+            )
+        return (1 - f2b_probabilities[boarded_run_index]) * failure_probability
 
 
 if __name__ == "__main__":
-    station_origin = "VIN"
-    stations_destination = ["NAT", "LYO"]
+    start_time = time()
+    origin_station = "CHL"
+    destination_stations = [
+        "AUB",
+        "ETO",
+        "DEF",
+        "NAP",
+        "NAU",
+        "NAV",
+        "RUE",
+        "CRO",
+        "VES",
+        "PEC",
+        "GER",
+    ]
     date = "03/02/2020"
-    direction = "west"
 
-    initialization = False
+    parameters = {
+        "CHL": {"distribution": "cauchy", "parameters": {"loc": 94.8, "scale": 17.9}},
+        "AUB": {
+            "distribution": "lognorm",
+            "parameters": {"s": 0.379, "loc": 16.6, "scale": 89.7},
+        },
+        "ETO": {
+            "distribution": "chi2",
+            "parameters": {"df": 16.0, "loc": 29.9, "scale": 7.2},
+        },
+        "DEF": {
+            "distribution": "lognorm",
+            "parameters": {"s": 0.31, "loc": -10.7, "scale": 102.0},
+        },
+        "NAP": {
+            "distribution": "rayleigh",
+            "parameters": {"loc": 0.636, "scale": 57.6},
+        },
+        "NAU": {
+            "distribution": "lognorm",
+            "parameters": {"s": 0.421, "loc": 26.4, "scale": 62.3},
+        },
+        "NAV": {
+            "distribution": "gamma",
+            "parameters": {"a": 2.83, "loc": 35.1, "scale": 24.3},
+        },
+        "RUE": {
+            "distribution": "chi2",
+            "parameters": {"df": 6.09, "loc": 13.9, "scale": 9.66},
+        },
+        "CRO": {
+            "distribution": "rayleigh",
+            "parameters": {"loc": -0.715, "scale": 44.3},
+        },
+        "VES": {
+            "distribution": "gamma",
+            "parameters": {"a": 1.56, "loc": 29.0, "scale": 33.7},
+        },
+        "PEC": {
+            "distribution": "lognorm",
+            "parameters": {"s": 0.579, "loc": 14.8, "scale": 39.6},
+        },
+        "GER": {
+            "distribution": "gamma",
+            "parameters": {"a": 6.8, "loc": 0.434, "scale": 13.7},
+        },
+    }
 
-    with open("parameters.yml", "r") as file:
+    initialization = True
+
+    with open("../parameters.yml", "r") as file:
         param = safe_load(file)
 
-    data = Data(date, direction, station_origin, stations_destination)
+    data = Data(date, origin_station, destination_stations)
 
     # Offline precomputations.
 
-    likelihood_blocks = compute_likelihood_blocks(data, param, False, "gaussian")
-    print(likelihood_blocks)
+    likelihood_blocks = compute_likelihood_blocks(data, parameters)
 
-    # Initialize f2b proba for tests.
+    # Guess best uniform f2b proba.
     if initialization:
         initial_probability_range = linspace(0, 1, 50)
         objective_values = []
         for initial_probability in initial_probability_range:
-            f2b_probabilities = [initial_probability for _ in range(data.mission_nbr)]
-            start_time = time()
+            f2b_probabilities = [initial_probability for _ in range(len(data.runs))]
             objective_values.append(
                 minus_log_likelihood_global(
                     f2b_probabilities, [0], data, likelihood_blocks
                 )
-            )
-            print(
-                f"Objective function evaluation execution time : {time() - start_time:.2}s"
             )
 
         min_value = min(objective_values)

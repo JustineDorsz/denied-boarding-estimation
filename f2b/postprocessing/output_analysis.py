@@ -1,23 +1,10 @@
-"""Estimation of fail-to-board probabilities from AFC and AVL data.
-"""
-
-__authors__ = "Justine Dorsz"
-__date__ = "2022-03-04"
-
-from csv import writer
-from time import time
-
 from matplotlib import pyplot
-from numpy.random import rand
-from scipy import optimize
 
-from data import Data
-from likelihood import (
+from f2b.f2b_estimation.data import Data
+from f2b.f2b_estimation.likelihood import (
     compute_likelihood_blocks,
-    minus_log_likelihood_global,
 )
 
-start_time = time()
 origin_station = "CHL"
 destination_stations = [
     "AUB",
@@ -82,34 +69,20 @@ parameters = {
     },
 }
 
-
 if __name__ == "__main__":
 
-    data = Data(date, origin_station, destination_stations)
+    # data = Data(date, origin_station, destination_stations)
 
     # Offline precomputations.
-    likelihood_blocks = compute_likelihood_blocks(data, parameters)
+    # likelihood_blocks = compute_likelihood_blocks(data, parameters)
 
-    f2b_probabilities_initial = [0.02 for _ in range(len(data.runs))]
-
-    # Likelihood optimization.
-    # https://docs.scipy.org/doc/scipy/tutorial/optimize.html
-    iteration = [0]
-    start_time = time()
-    f2b_estimated = optimize.minimize(
-        minus_log_likelihood_global,
-        f2b_probabilities_initial,
-        method="Powell",
-        tol=0.1,
-        args=(iteration, data, likelihood_blocks),
-        bounds=[(0, 1) for i in range(len(data.runs))],
-    ).x
-
-    print(f"Optimization execution time: {time() - start_time:.2}s")
-    print(f2b_estimated)
-
-    with open("../output/f2b_results_" + origin_station + ".txt", "w") as output_file:
-        output_file.write(f2b_estimated)
-
-    pyplot.plot(f2b_estimated)
-    pyplot.show()
+    with open(
+        "/home/justine/Nextcloud/Cired/Recherche/Econometrie/fail_to_board_probability/f2b_code/f2b/output/"
+        + origin_station
+        + ".txt",
+        "r",
+    ) as f2b_file:
+        f2b_file_content = f2b_file.read()
+        f2b_estimated = f2b_file_content.split()
+        f2b_estimated = [float(f2b) for f2b in f2b_estimated]
+        print(f2b_estimated)

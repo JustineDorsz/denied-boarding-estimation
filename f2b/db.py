@@ -83,6 +83,8 @@ def get_trips_filtered_by(
     if time_slot_end:
         time_slot_end_condition = 'AND "egress_time" <= "' + time_slot_end + '" '
 
+    reasonable_length_condition = 'AND "short_trip" = 0 AND "long_trip" = 0 '
+
     cur.execute(
         select_columns
         + date_condition
@@ -90,6 +92,7 @@ def get_trips_filtered_by(
         + egress_station_condition
         + time_slot_begin_condition
         + time_slot_end_condition
+        + reasonable_length_condition
     )
     trips_selected = DataFrame(cur.fetchall(), columns=columns_of_interest)
 
@@ -140,11 +143,11 @@ def get_run_arrivals(db_path: str, date: str, run: str, stations: list):
             + '" AND "event" = "A"'
         )
         try:
-            (station_arrival,) = cur.fetchone()
+            (station_arrival_time,) = cur.fetchone()
         except TypeError:  # no arrival record at this station
-            station_arrival = None
+            station_arrival_time = None
 
-        run_info[date, run, station] = station_arrival
+        run_info[run, station] = station_arrival_time
 
     cur.close()
     conn.close()
@@ -173,11 +176,11 @@ def get_run_departures(db_path: str, date: str, run: str, stations: list):
             + '" AND "event" = "D"'
         )
         try:
-            (station_departure,) = cur.fetchone()
+            (station_departure_time,) = cur.fetchone()
         except TypeError:  # no departure record at this station
-            station_departure = None
+            station_departure_time = None
 
-        run_departures[date, run, station] = station_departure
+        run_departures[run, station] = station_departure_time
 
     cur.close()
     conn.close()
@@ -200,11 +203,11 @@ def get_previous_run(
         + '"date" = "'
         + date
         + '" AND '
-        + '"station" = "'
-        + station_origin
-        + '" AND '
         + '"run" = "'
         + run
+        + '" AND '
+        + '"station" = "'
+        + station_origin
         + '" AND '
         + '"event" = "D"'
     )
@@ -217,15 +220,16 @@ def get_previous_run(
         + '"date" = "'
         + date
         + '" AND '
+        + '"run" != "      " '
+        + " AND "
         + '"station" = "'
         + station_origin
-        + '"AND '
-        + '"run" != "      " '
+        + '" AND '
+        + '"event" = "D" '
         + "AND "
         + '"direction" = "'
         + direction
         + '" AND '
-        + '"event" = "D" AND '
         + '"time" < "'
         + departure_time
         + '" '
@@ -240,15 +244,16 @@ def get_previous_run(
         + '"date" = "'
         + date
         + '" AND '
+        + '"run" != "      " '
+        + " AND "
         + '"station" = "'
         + station_destination
-        + '"AND '
-        + '"run" != "      " '
+        + '" AND '
+        + '"event" = "A" '
         + "AND "
         + '"direction" = "'
         + direction
-        + '" AND '
-        + '"event" = "A" '
+        + '"'
     )
 
     cur.execute(query_select_candidate_runs_arrival)

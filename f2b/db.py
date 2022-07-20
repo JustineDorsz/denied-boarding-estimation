@@ -16,7 +16,6 @@ from pandas import DataFrame
 # --------------------------------------------------------------------------------
 
 DB_PATH = "/home/justine/Cired/Data/AFC_AVL_2020_02/RERA_202002.db"
-AVL_DIRECTIONS = {"west": "P", "est": "I"}
 
 
 def create_connection(db_file: str) -> Connection:

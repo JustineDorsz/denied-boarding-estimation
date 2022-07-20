@@ -1,92 +1,85 @@
-CHL: 
-  distribution:
-    cauchy 
+AUB:
+  distribution: chi2
   parameters:
-    loc: 94.8
-    scale: 17.9 
-
-AUB: 
-  distribution:
-    lognorm 
-  parameters:  
-    s: 0.379
-    loc: 16.6
-    scale: 89.7
-
-ETO: 
-  distribution:
-    chi2 
+    df: 15.9
+    loc: -1.33
+    scale: 7.4
+CHL:
+  distribution: chi2
   parameters:
-    df: 16.0
-    loc: 29.9
-    scale: 7.2
-
-DEF: 
-  distribution:
-    lognorm 
-  parameters:  
-    s: 0.31 
-    loc: -10.7
+    df: 8.65
+    loc: 11.3
+    scale: 7.78
+CRO:
+  distribution: chi2
+  parameters:
+    df: 3.62
+    loc: 9.92
+    scale: 12.3
+DEF:
+  distribution: lognorm
+  parameters:
+    loc: 0.7
+    s: 0.368
+    scale: 94.5
+ETO:
+  distribution: lognorm
+  parameters:
+    loc: -72.6
+    s: 0.189
+    scale: 216.0
+GER:
+  distribution: lognorm
+  parameters:
+    loc: -4.75
+    s: 0.389
+    scale: 93.1
+LYO:
+  distribution: lognorm
+  parameters:
+    loc: -23.3
+    s: 0.284
     scale: 102.0
-
-NAP: 
-  distribution: 
-    rayleigh 
+NAP:
+  distribution: norm
   parameters:
-    loc: 0.636
-    scale: 57.6
-
-NAU: 
-  distribution:
-    lognorm 
-  parameters:  
-    s: 0.421
-    loc: 26.4
-    scale: 62.3
-
-NAV: 
-  distribution: 
-    gamma 
-  parameters: 
-    a: 2.83
-    loc: 35.1
-    scale: 24.3
-
-RUE: 
-  distribution:
-    chi2 
+    loc: 69.7
+    scale: 36.6
+NAT:
+  distribution: rayleigh
   parameters:
-    df: 6.09
-    loc: 13.9
-    scale: 9.66
-
-CRO: 
-  distribution: 
-    rayleigh 
+    loc: 84.6
+    scale: 38.7
+NAU:
+  distribution: cauchy
   parameters:
-    loc: -0.715
-    scale: 44.3
-
-VES: 
-  distribution: 
-    gamma 
-  parameters: 
-    a: 1.56
-    loc: 29.0
-    scale: 33.7
-
-PEC: 
-  distribution:
-    lognorm 
-  parameters:  
-    s: 0.579
-    loc: 14.8
-    scale: 39.6
-
-GER: 
-  distribution: 
-    gamma 
-  parameters: 
-    a: 6.8
-    loc: 0.434
-    scale: 13.7
+    loc: 88.3
+    scale: 14.5
+NAV:
+  distribution: rayleigh
+  parameters:
+    loc: 35.0
+    scale: 57.7
+PEC:
+  distribution: lognorm
+  parameters:
+    loc: 11.0
+    s: 0.521
+    scale: 44.9
+RUE:
+  distribution: lognorm
+  parameters:
+    loc: 9.23
+    s: 0.524
+    scale: 56.9
+VES:
+  distribution: gamma
+  parameters:
+    a: 1.66
+    loc: 32.5
+    scale: 29.0
+VIN:
+  distribution: cauchy
+  parameters:
+    loc: 64.4
+    scale: 17.5

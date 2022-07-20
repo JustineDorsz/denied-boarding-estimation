@@ -13,6 +13,8 @@ import f2b.db as db
 
 DB_PATH = "/home/justine/Cired/Data/AFC_AVL_2020_02/RERA_202002.db"
 
+MAX_FEASIBLE_RUNS = 5
+
 
 class Data:
     def __init__(
@@ -75,7 +77,7 @@ class Data:
             if not feasible_runs:
                 self.trips = self.trips.drop(trip_id)
 
-            if len(feasible_runs) > 5:
+            if len(feasible_runs) > MAX_FEASIBLE_RUNS:
                 too_long_trip += 1
                 self.trips = self.trips.drop(trip_id)
 

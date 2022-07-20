@@ -4,22 +4,22 @@
 __authors__ = "Justine Dorsz"
 __date__ = "2022-06-29"
 
+from datetime import date
 from time import time
+from matplotlib.figure import Figure
 
 from tqdm import tqdm
 
 
 import f2b.db as db
 from fitter import Fitter, get_common_distributions
-from matplotlib import pyplot
+from matplotlib import axes, pyplot
 from pandas import Timestamp, concat
 from sigfig import round
 import scipy.stats
 from yaml import dump
 
 DB_PATH = "/home/justine/Cired/Data/AFC_AVL_2020_02/RERA_202002.db"
-
-WRITE_OUTPUT = True
 
 
 class Data:
@@ -55,7 +55,7 @@ class Data:
                     station_origin,
                     self.station_estimation,
                 )
-                if date == self.dates[0]:
+                if date == self.dates[0] and station_origin == self.stations_origin[0]:
                     self.trips = trips_to_destination
                 else:
                     self.trips = concat([self.trips, trips_to_destination])
@@ -76,7 +76,7 @@ class Data:
             date = self.trips.at[trip_id, "date"]
             run_arrival_time = db.get_run_arrivals(
                 self.db_path, date, feasible_run, [self.station_estimation]
-            )[date, feasible_run, self.station_estimation]
+            )[feasible_run, self.station_estimation]
             trip_egress_validation_time = self.trips.at[trip_id, "egress_time"]
             self.egress_times.append(
                 (
@@ -85,11 +85,57 @@ class Data:
             )
 
 
+def plot_distributions_and_estimations(
+    fig: Figure,
+    axs: axes.Axes,
+    plot_position: list,
+    egress_times: dict,
+    fitted_laws: dict,
+    station_estimation: str,
+) -> None:
+    "Plot the observed distribution and the estimated law of egress times in each station."
+    plot_row = plot_position[0]
+    plot_column = plot_position[1]
+    axs[plot_row, plot_column].hist(
+        egress_times_by_station[station_estimation], bins=300
+    )
+    axs[plot_row, plot_column].set_title(station_estimation)
+    ax2 = axs[plot_row, plot_column].twinx()
+    egress_times_by_station[station_estimation].sort()
+
+    for law in best_law_info.keys():
+        fitted_distrib = law
+        fitted_distrib_function = eval("scipy.stats." + law)
+
+    ax2label = fitted_distrib + "\n"
+    for param_key in best_law_info[fitted_distrib].keys():
+        ax2label += (
+            str(param_key) + ":" + str(best_law_info[fitted_distrib][param_key]) + "\n"
+        )
+    ax2.plot(
+        egress_times_by_station[station_estimation],
+        fitted_distrib_function.pdf(
+            egress_times_by_station[station_estimation],
+            **best_law_info[fitted_distrib],
+        ),
+        color="red",
+        label=ax2label,
+    ),
+    pyplot.legend(loc="upper right")
+    pyplot.xlim([0, 300])
+
+
 if __name__ == "__main__":
     start_time = time()
-    dates = ["03/02/2020", "04/02/2020", "05/02/2020"]
+
+    write_output = False
+
+    dates = ["03/02/2020", "04/02/2020"]
 
     stations = [
+        "VIN",
+        "NAT",
+        "LYO",
         "CHL",
         "AUB",
         "ETO",
@@ -110,7 +156,7 @@ if __name__ == "__main__":
     plot_row = 0
     plot_column = 0
 
-    fitted_laws = {}
+    result_output_writing = {}
 
     print("Estimation running...")
     for station_estimation in tqdm(stations):
@@ -126,7 +172,9 @@ if __name__ == "__main__":
         # Get list of egress times of all trips between stations_origin and
         # station_estimation.
         data = Data(station_estimation, dates, stations_origin)
+        print(f"{station_estimation}: {len(data.trips.index)} trips.")
         egress_times_by_station[station_estimation] = data.egress_times
+        print(f"{station_estimation}: {len(data.egress_times)} egress_times.")
 
         # Find best probability law fitting the egress time distribution.
         f = Fitter(
@@ -135,47 +183,38 @@ if __name__ == "__main__":
         )
         f.fit()
         best_law_info = f.get_best()
-        fitted_laws[station_estimation] = best_law_info
 
+        # Format estimated parameters, write distributions and parameters in fitted_laws.
         for law in best_law_info.keys():
-            fitted_distrib = law
-            fitted_distrib_function = eval("scipy.stats." + law)
+            param_dict = {}
             for param_name in best_law_info[law].keys():
                 best_law_info[law][param_name] = round(
                     best_law_info[law][param_name], sigfigs=3
                 )
+                param_dict.update({param_name: float(best_law_info[law][param_name])})
+            result_output_writing.update(
+                {station_estimation: {"distribution": law, "parameters": param_dict}}
+            )
 
         # Plot egress time distribution and fitted law.
-        axs[plot_row, plot_column].hist(
-            egress_times_by_station[station_estimation], bins=500
-        )
-        axs[plot_row, plot_column].set_title(station_estimation)
-        ax2 = axs[plot_row, plot_column].twinx()
-        egress_times_by_station[station_estimation].sort()
-        ax2.plot(
-            egress_times_by_station[station_estimation],
-            fitted_distrib_function.pdf(
-                egress_times_by_station[station_estimation],
-                **best_law_info[fitted_distrib],
-            ),
-            color="red",
-            label=fitted_distrib + " \n" + str(best_law_info[fitted_distrib]),
-        )
-        pyplot.legend(loc="upper right")
-        pyplot.xlim([0, 300])
+        if plot_row < 3:
+            plot_distributions_and_estimations(
+                fig,
+                axs,
+                [plot_row, plot_column],
+                egress_times_by_station,
+                best_law_info,
+                station_estimation,
+            )
 
+        # Update plot position.
         plot_row = plot_row + (plot_column + 1) // 4
         plot_column = (plot_column + 1) % 4
 
-    if WRITE_OUTPUT:
-        with open("../parameters.yml", "w+") as parameters_file:
-            # dump(
-            #     {station_estimation: best_law}, parameters_file, default_flow_style=False
-            # )
-            # parameters_file.write(dump(fitted_laws))
-            parameters_file.write(str(fitted_laws))
-            parameters_file.close()
+    print(result_output_writing)
+    if write_output:
+        with open("f2b/parameters.yml", "w+") as parameters_file:
+            dump(result_output_writing, parameters_file)
 
-    print(str(fitted_laws))
     print(f"Execution time: {time() - start_time}s.")
     pyplot.show()

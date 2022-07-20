@@ -9,7 +9,11 @@ source venv/bin/activate
 ```
 - Dependencies installation: 
 ```bash
-pip install -r requirements.txt`
+pip install -r requirements.txt
+```
+and to see itself as a package:
+```bash
+pip install -e .
 ```
 
 - If `matplotlib.pyplot.plot()` fails:

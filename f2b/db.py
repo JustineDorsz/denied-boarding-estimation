@@ -110,7 +110,7 @@ def get_feasible_runs_for_one_trip(db_path: str, trip_id: int) -> list:
     except OperationalError:
         pass
 
-    cur.execute(f'SELECT mission FROM trip_run WHERE "trip_index" = {trip_id}')
+    cur.execute(f'SELECT run FROM trip_run WHERE "trip_index" = {trip_id}')
     request_result = cur.fetchall()
     runs = [run[0] for run in request_result]
 

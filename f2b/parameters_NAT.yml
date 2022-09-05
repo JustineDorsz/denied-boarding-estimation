@@ -1,0 +1,29 @@
+AUB:
+  distribution: gamma
+  parameters:
+    a: 6.74
+    loc: 20.7
+    scale: 12.8
+DEF:
+  distribution: gamma
+  parameters:
+    a: 8.55
+    loc: 7.35
+    scale: 10.3
+ETO:
+  distribution: lognorm
+  parameters:
+    loc: 3.64
+    s: 0.291
+    scale: 126.0
+LYO:
+  distribution: rayleigh
+  parameters:
+    loc: 26.1
+    scale: 50.8
+NAT:
+  distribution: lognorm
+  parameters:
+    loc: 5.73
+    s: 0.23
+    scale: 105.0

@@ -4,9 +4,7 @@
 __authors__ = "Justine Dorsz"
 __date__ = "2022-06-29"
 
-from datetime import date
 from time import time
-from matplotlib.figure import Figure
 
 from tqdm import tqdm
 
@@ -17,9 +15,10 @@ from matplotlib import axes, pyplot
 from pandas import Timestamp, concat
 from sigfig import round
 import scipy.stats
+from statistics import mean, stdev
 from yaml import dump
 
-DB_PATH = "/home/justine/Cired/Data/AFC_AVL_2020_02/RERA_202002.db"
+DB_PATH = "/home/justine/Cired/Data/AFC_AVL_2020_02/RERA_202002_test.db"
 
 
 class Data:
@@ -32,7 +31,7 @@ class Data:
         """Load trips with one feasible run from database,
         store in datadrame attribute self.trips.
         Compute egress time of each trip,
-        store in dict attribute self.trips_egress_times."""
+        store in dict attribute self.egress_times."""
 
         self.dates = dates
         self.station_estimation = station_estimation
@@ -67,7 +66,7 @@ class Data:
             if len(feasible_runs) == 1:
                 self.feasible_run_by_trips[trip_id] = feasible_runs[0]
             else:
-                self.trips.drop(trip_id, axis=0)
+                self.trips = self.trips.drop(trip_id, axis=0)
 
     def _get_egress_times(self) -> None:
         self.egress_times = []
@@ -86,20 +85,24 @@ class Data:
 
 
 def plot_distributions_and_estimations(
-    fig: Figure,
     axs: axes.Axes,
     plot_position: list,
-    egress_times: dict,
+    egress_times_by_station: dict,
     fitted_laws: dict,
     station_estimation: str,
 ) -> None:
     "Plot the observed distribution and the estimated law of egress times in each station."
+
+    colors_4am = ["#2a225d", "#c83576", "#ffbe7d", "#e9f98f", "#eaf7ff"]
+
     plot_row = plot_position[0]
     plot_column = plot_position[1]
     axs[plot_row, plot_column].hist(
-        egress_times_by_station[station_estimation], bins=300
+        egress_times_by_station[station_estimation], bins=300, color=colors_4am[0]
     )
+    # axs[plot_row, plot_column].axis(ymin=0, ymax=250)
     axs[plot_row, plot_column].set_title(station_estimation)
+
     ax2 = axs[plot_row, plot_column].twinx()
     egress_times_by_station[station_estimation].sort()
 
@@ -118,9 +121,10 @@ def plot_distributions_and_estimations(
             egress_times_by_station[station_estimation],
             **best_law_info[fitted_distrib],
         ),
-        color="red",
+        color=colors_4am[1],
         label=ax2label,
-    ),
+    )
+    ax2.axis(ymin=0, ymax=0.018)
     pyplot.legend(loc="upper right")
     pyplot.xlim([0, 300])
 
@@ -129,30 +133,24 @@ if __name__ == "__main__":
     start_time = time()
 
     write_output = False
+    save_fig = True
 
-    dates = ["03/02/2020", "04/02/2020"]
+    dates = ["06/02/2020"]
 
     stations = [
         "VIN",
         "NAT",
         "LYO",
-        "CHL",
         "AUB",
         "ETO",
         "DEF",
-        "NAP",
-        "NAU",
-        "NAV",
-        "RUE",
-        "CRO",
-        "VES",
-        "PEC",
-        "GER",
     ]
 
     egress_times_by_station = {}
 
-    fig, axs = pyplot.subplots(3, 4)
+    row_nbr = 2
+    column_nbr = 3
+    fig, axs = pyplot.subplots(row_nbr, column_nbr, figsize=(14, 12))
     plot_row = 0
     plot_column = 0
 
@@ -172,9 +170,10 @@ if __name__ == "__main__":
         # Get list of egress times of all trips between stations_origin and
         # station_estimation.
         data = Data(station_estimation, dates, stations_origin)
-        print(f"{station_estimation}: {len(data.trips.index)} trips.")
         egress_times_by_station[station_estimation] = data.egress_times
-        print(f"{station_estimation}: {len(data.egress_times)} egress_times.")
+        print(
+            f"{station_estimation}: {len(data.egress_times)} egress_times, average = {mean(data.egress_times)}, standard deviation = {stdev(data.egress_times)}."
+        )
 
         # Find best probability law fitting the egress time distribution.
         f = Fitter(
@@ -197,9 +196,8 @@ if __name__ == "__main__":
             )
 
         # Plot egress time distribution and fitted law.
-        if plot_row < 3:
+        if plot_row < column_nbr:
             plot_distributions_and_estimations(
-                fig,
                 axs,
                 [plot_row, plot_column],
                 egress_times_by_station,
@@ -208,8 +206,8 @@ if __name__ == "__main__":
             )
 
         # Update plot position.
-        plot_row = plot_row + (plot_column + 1) // 4
-        plot_column = (plot_column + 1) % 4
+        plot_row = plot_row + (plot_column + 1) // column_nbr
+        plot_column = (plot_column + 1) % column_nbr
 
     print(result_output_writing)
     if write_output:
@@ -217,4 +215,10 @@ if __name__ == "__main__":
             dump(result_output_writing, parameters_file)
 
     print(f"Execution time: {time() - start_time}s.")
-    pyplot.show()
+
+    if save_fig:
+        pyplot.savefig(
+            "/home/justine/Nextcloud/Cired/Recherche/Econometrie/fail_to_board_probability/Draft_article/figures/fitted_egress_times.pdf"
+        )
+    else:
+        pyplot.show()

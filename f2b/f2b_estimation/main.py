@@ -58,7 +58,7 @@ if __name__ == "__main__":
         minus_log_likelihood_global,
         f2b_probabilities_initial,
         method="Powell",
-        tol=0.1,
+        tol=0.05,
         args=(iteration, data, likelihood_blocks),
         bounds=[(0, 1) for i in range(len(data.runs))],
     ).x

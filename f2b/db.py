@@ -196,6 +196,14 @@ def get_previous_run(
     conn = create_connection(db_path)
     cur = conn.cursor()
 
+    try:
+        cur.execute(
+            "CREATE INDEX date_run_station_event_direction_time "
+            + "ON avl(date, run, station, event, direction, time"
+        )
+    except OperationalError:
+        pass
+
     query_departure_time_direction = (
         "SELECT time, direction FROM avl "
         + "WHERE "

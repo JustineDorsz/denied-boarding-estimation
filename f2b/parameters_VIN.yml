@@ -1,0 +1,36 @@
+AUB:
+  distribution: gamma
+  parameters:
+    a: 5.71
+    loc: 23.8
+    scale: 15.6
+DEF:
+  distribution: gamma
+  parameters:
+    a: 8.48
+    loc: 7.79
+    scale: 10.4
+ETO:
+  distribution: lognorm
+  parameters:
+    loc: 6.06
+    s: 0.299
+    scale: 123.0
+LYO:
+  distribution: gamma
+  parameters:
+    a: 3.95
+    loc: 17.5
+    scale: 16.6
+NAT:
+  distribution: lognorm
+  parameters:
+    loc: -268.0
+    s: 0.0733
+    scale: 396.0
+VIN:
+  distribution: lognorm
+  parameters:
+    loc: 4.42
+    s: 0.377
+    scale: 76.2

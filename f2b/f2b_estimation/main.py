@@ -20,34 +20,22 @@ from likelihood import (
 )
 
 start_time = time()
-origin_station = "VIN"
-# destination_stations = [
-#     "AUB",
-#     "ETO",
-#     "DEF",
-#     "NAP",
-#     "NAU",
-#     "NAV",
-#     "RUE",
-#     "CRO",
-#     "VES",
-#     "PEC",
-#     "GER",
-# ]
-destination_stations = ["LYO", "AUB", "ETO", "DEF", "NAP", "NAU", "RUE", "GER"]
+origin_station = "NAT"
+destination_stations = ["LYO", "CHL", "AUB", "ETO", "DEF"]
 
-date = "03/02/2020"
+date = "04/02/2020"
 
-with open("f2b/parameters.yml") as file:
+with open(f"f2b/parameters_{origin_station}.yml") as file:
     parameters = safe_load(file)
 
 if __name__ == "__main__":
+
+    write_output = True
 
     data = Data(date, origin_station, destination_stations)
 
     # Offline precomputations.
     likelihood_blocks = compute_likelihood_blocks(data, parameters)
-
     f2b_probabilities_initial = [0.02 for _ in range(len(data.runs))]
 
     # Likelihood optimization.
@@ -66,9 +54,12 @@ if __name__ == "__main__":
     print(f"Optimization execution time: {time() - start_time:.2}s")
     print(f2b_estimated)
 
-    with open("f2b/output/f2b_results_" + origin_station + ".csv", "w") as output_file:
-        writer = writer(output_file)
-        writer.writerow(f2b_estimated)
+    if write_output:
+        with open(
+            "f2b/output/f2b_results_" + origin_station + ".csv", "w"
+        ) as output_file:
+            writer = writer(output_file)
+            writer.writerow(f2b_estimated)
 
     pyplot.plot(f2b_estimated)
     pyplot.show()

@@ -100,7 +100,7 @@ def plot_distributions_and_estimations(
     axs[plot_row, plot_column].hist(
         egress_times_by_station[station_estimation], bins=300, color=colors_4am[0]
     )
-    # axs[plot_row, plot_column].axis(ymin=0, ymax=250)
+    axs[plot_row, plot_column].axis(ymin=0, ymax=250)
     axs[plot_row, plot_column].set_title(station_estimation)
 
     ax2 = axs[plot_row, plot_column].twinx()
@@ -135,15 +135,27 @@ if __name__ == "__main__":
     write_output = False
     save_fig = True
 
-    dates = ["06/02/2020"]
+    dates = ["04/02/2020"]
 
     stations = [
-        "VIN",
         "NAT",
         "LYO",
+        "CHL",
         "AUB",
         "ETO",
         "DEF",
+    ]
+
+    distributions_to_test = [
+        "cauchy",
+        "chi2",
+        "expon",
+        "exponpow",
+        "gamma",
+        "lognorm",
+        "norm",
+        "powerlaw",
+        "uniform",
     ]
 
     egress_times_by_station = {}
@@ -178,7 +190,7 @@ if __name__ == "__main__":
         # Find best probability law fitting the egress time distribution.
         f = Fitter(
             egress_times_by_station[station_estimation],
-            distributions=get_common_distributions(),
+            distributions=distributions_to_test,
         )
         f.fit()
         best_law_info = f.get_best()
@@ -218,7 +230,7 @@ if __name__ == "__main__":
 
     if save_fig:
         pyplot.savefig(
-            "/home/justine/Nextcloud/Cired/Recherche/Econometrie/fail_to_board_probability/Draft_article/figures/fitted_egress_times.pdf"
+            "/home/justine/Nextcloud/Cired/Recherche/Econometrie/fail_to_board_probability/Draft_article/figures/fitted_egress_times_scaled.pdf"
         )
     else:
         pyplot.show()

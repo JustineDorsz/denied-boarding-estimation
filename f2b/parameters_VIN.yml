@@ -1,36 +1,41 @@
 AUB:
-  distribution: gamma
+  distribution: lognorm
   parameters:
-    a: 5.71
-    loc: 23.8
-    scale: 15.6
+    loc: 4.69
+    s: 0.346
+    scale: 101.0
+CHL:
+  distribution: lognorm
+  parameters:
+    loc: 8.09
+    s: 0.454
+    scale: 62.8
 DEF:
-  distribution: gamma
+  distribution: chi2
   parameters:
-    a: 8.48
-    loc: 7.79
-    scale: 10.4
+    df: 20.0
+    loc: -3.52
+    scale: 5.06
 ETO:
   distribution: lognorm
   parameters:
-    loc: 6.06
-    s: 0.299
-    scale: 123.0
+    loc: 6.0
+    s: 0.297
+    scale: 132.0
 LYO:
   distribution: gamma
   parameters:
-    a: 3.95
-    loc: 17.5
-    scale: 16.6
+    a: 4.13
+    loc: 19.4
+    scale: 15.2
 NAT:
-  distribution: lognorm
+  distribution: norm
   parameters:
-    loc: -268.0
-    s: 0.0733
-    scale: 396.0
+    loc: 127.0
+    scale: 32.9
 VIN:
   distribution: lognorm
   parameters:
-    loc: 4.42
-    s: 0.377
-    scale: 76.2
+    loc: -6.25
+    s: 0.341
+    scale: 90.0

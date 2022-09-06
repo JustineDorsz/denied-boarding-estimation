@@ -131,7 +131,6 @@ def compute_one_likelihood_block(
     egress_proba = station_egress_duration_distribution.pdf(
         egress_duration, **station_egress_duration_distribution_params
     )
-
     return egress_proba * access_proba_difference
 
 
@@ -192,6 +191,8 @@ def compute_log_likelihood_indiv(
             * block
         )
 
+    if conditional_exit_duration_proba == 0:
+        print(trip_id)
     return log(conditional_exit_duration_proba)
 
 

@@ -190,9 +190,6 @@ def compute_log_likelihood_indiv(
             )
             * block
         )
-
-    if conditional_exit_duration_proba == 0:
-        print(trip_id)
     return log(conditional_exit_duration_proba)
 
 

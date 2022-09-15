@@ -42,7 +42,7 @@ if __name__ == "__main__":
     trip_number_by_run["NAT"].pop(302)
 
     # Apply a threshold to significant estimated probabilities.
-    proba_threshold = 0.2
+    proba_threshold = 0.0
     for run in range(len(data["VIN"].runs)):
         if f2b_estimated["VIN"][run] < proba_threshold:
             f2b_estimated["VIN"][run] = 0
@@ -105,7 +105,7 @@ if __name__ == "__main__":
             labels=run_departure_time_labels,
         )
         pyplot.legend()
-        pyplot.show()
+        # pyplot.show()
         pyplot.savefig(
             "/home/justine/Nextcloud/Cired/Recherche/Econometrie/fail_to_board_probability/Draft_article/figures/compared_estimated_denied_probability.pdf"
         )

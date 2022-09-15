@@ -19,24 +19,30 @@ from likelihood import (
     minus_log_likelihood_global,
 )
 
-start_time = time()
-origin_station = "NAT"
-destination_stations = ["LYO", "CHL", "AUB", "ETO", "DEF"]
-
-date = "04/02/2020"
-
-with open(f"f2b/parameters_{origin_station}.yml") as file:
-    parameters = safe_load(file)
 
 if __name__ == "__main__":
 
+    origin_station = "NAT"
+    destination_stations = ["LYO", "CHL", "AUB", "ETO", "DEF"]
+
+    date = "04/02/2020"
+
     write_output = True
+
+    morning_peak_restriction = True
+
+    if morning_peak_restriction:
+        with open(f"f2b/parameters_morning_peak_{origin_station}.yml") as file:
+            parameters = safe_load(file)
+    else:
+        with open(f"f2b/parameters_{origin_station}.yml") as file:
+            parameters = safe_load(file)
 
     data = Data(date, origin_station, destination_stations)
 
     # Offline precomputations.
     likelihood_blocks = compute_likelihood_blocks(data, parameters)
-    f2b_probabilities_initial = [0.02 for _ in range(len(data.runs))]
+    f2b_probabilities_initial = [0 for _ in range(len(data.runs))]
 
     # Likelihood optimization.
     # https://docs.scipy.org/doc/scipy/tutorial/optimize.html
@@ -55,11 +61,18 @@ if __name__ == "__main__":
     print(f2b_estimated)
 
     if write_output:
-        with open(
-            "f2b/output/f2b_results_" + origin_station + ".csv", "w"
-        ) as output_file:
-            writer = writer(output_file)
-            writer.writerow(f2b_estimated)
+        if morning_peak_restriction:
+            with open(
+                "f2b/output/f2b_results_morning_peak_" + origin_station + ".csv", "w"
+            ) as output_file:
+                writer = writer(output_file)
+                writer.writerow(f2b_estimated)
+        else:
+            with open(
+                "f2b/output/f2b_results_" + origin_station + ".csv", "w"
+            ) as output_file:
+                writer = writer(output_file)
+                writer.writerow(f2b_estimated)
 
     pyplot.plot(f2b_estimated)
     pyplot.show()

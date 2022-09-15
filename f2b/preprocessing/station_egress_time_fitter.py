@@ -27,6 +27,7 @@ class Data:
         station_estimation: str,
         dates: str,
         stations_origin: str,
+        morning_peak_restriction: bool,
     ):
         """Load trips with one feasible run from database,
         store in datadrame attribute self.trips.
@@ -40,6 +41,9 @@ class Data:
 
         self._get_all_trips()
         self.trips = self.trips.set_index("id")
+
+        if morning_peak_restriction:
+            self._filter_trips_morning_peak()
 
         self._filter_trips_with_one_feasible_run()
 
@@ -58,6 +62,14 @@ class Data:
                     self.trips = trips_to_destination
                 else:
                     self.trips = concat([self.trips, trips_to_destination])
+
+    def _filter_trips_morning_peak(self):
+        for trip_id in self.trips.index:
+            if (
+                self.trips.at[trip_id, "access_time"] < "07:30:00"
+                or self.trips.at[trip_id, "access_time"] > "09:30:00"
+            ):
+                self.trips = self.trips.drop(trip_id, axis=0)
 
     def _filter_trips_with_one_feasible_run(self) -> None:
         self.feasible_run_by_trips = {}
@@ -132,12 +144,15 @@ def plot_distributions_and_estimations(
 if __name__ == "__main__":
     start_time = time()
 
-    write_output = False
-    save_fig = True
+    write_output = True
+    save_fig = False
+    fig_path = "/home/justine/Nextcloud/Cired/Recherche/Econometrie/fail_to_board_probability/Draft_article/figures/"
+    morning_peak_restriction = True
 
     dates = ["04/02/2020"]
 
     stations = [
+        "VIN",
         "NAT",
         "LYO",
         "CHL",
@@ -160,7 +175,7 @@ if __name__ == "__main__":
 
     egress_times_by_station = {}
 
-    row_nbr = 2
+    row_nbr = 3
     column_nbr = 3
     fig, axs = pyplot.subplots(row_nbr, column_nbr, figsize=(14, 12))
     plot_row = 0
@@ -181,7 +196,9 @@ if __name__ == "__main__":
 
         # Get list of egress times of all trips between stations_origin and
         # station_estimation.
-        data = Data(station_estimation, dates, stations_origin)
+        data = Data(
+            station_estimation, dates, stations_origin, morning_peak_restriction
+        )
         egress_times_by_station[station_estimation] = data.egress_times
         print(
             f"{station_estimation}: {len(data.egress_times)} egress_times, average = {mean(data.egress_times)}, standard deviation = {stdev(data.egress_times)}."
@@ -222,15 +239,25 @@ if __name__ == "__main__":
         plot_column = (plot_column + 1) % column_nbr
 
     print(result_output_writing)
+
     if write_output:
-        with open("f2b/parameters.yml", "w+") as parameters_file:
-            dump(result_output_writing, parameters_file)
+        if morning_peak_restriction:
+            with open(
+                "f2b/parameters_morning_peak_" + stations[0] + ".yml", "w+"
+            ) as parameters_file:
+                dump(result_output_writing, parameters_file)
+        else:
+            with open(
+                "f2b/parameters_" + stations[0] + ".yml", "w+"
+            ) as parameters_file:
+                dump(result_output_writing, parameters_file)
 
     print(f"Execution time: {time() - start_time}s.")
 
     if save_fig:
-        pyplot.savefig(
-            "/home/justine/Nextcloud/Cired/Recherche/Econometrie/fail_to_board_probability/Draft_article/figures/fitted_egress_times_scaled.pdf"
-        )
+        if morning_peak_restriction:
+            pyplot.savefig(fig_path + "fitted_egress_times_morning_peak.pdf")
+        else:
+            pyplot.savefig(fig_path + "fitted_egress_times.pdf")
     else:
         pyplot.show()

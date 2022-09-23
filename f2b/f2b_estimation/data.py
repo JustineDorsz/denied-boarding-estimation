@@ -40,6 +40,8 @@ class Data:
 
         self._get_feasible_runs()
 
+        self._concerned_trips_by_run()
+
         self._get_runs_time_info()
 
         self._order_runs_list()
@@ -95,6 +97,15 @@ class Data:
                 except KeyError:
                     self.destination_stations_by_run[feasible_run] = [trip_destination]
         print(f"number of too long trips removed: {too_long_trip}")
+
+    def _concerned_trips_by_run(self):
+        self.concerned_trips_by_run = {}
+        for trip_id in tqdm(self.trips.index):
+            for run in self.feasible_runs_by_trip[trip_id]:
+                try:
+                    self.concerned_trips_by_run[run].append(trip_id)
+                except KeyError:
+                    self.concerned_trips_by_run[run] = [trip_id]
 
     def _get_runs_time_info(self):
         self.previous_run = {}
@@ -169,23 +180,10 @@ class Data:
 
 if __name__ == "__main__":
     start_time = time()
-    origin_station = "CHL"
-    destination_stations = [
-        "AUB",
-        "ETO",
-        "DEF",
-        "NAP",
-        "NAU",
-        "NAV",
-        "RUE",
-        "CRO",
-        "VES",
-        "PEC",
-        "GER",
-    ]
-    date = "03/02/2020"
+    origin_station = "VIN"
+    destination_stations = ["NAT", "LYO", "CHL", "AUB", "ETO", "DEF"]
+    date = "04/02/2020"
 
     data = Data(date, origin_station, destination_stations)
 
     print(f"Data construction {time() - start_time}s.")
-    print(data.runs)

@@ -1,4 +1,5 @@
 """Estimation of fail-to-board probabilities from AFC and AVL data.
+Log-likelihood optimization with Scipy library.
 """
 
 __authors__ = "Justine Dorsz"
@@ -22,14 +23,14 @@ from likelihood import (
 
 if __name__ == "__main__":
 
-    origin_station = "NAT"
-    destination_stations = ["LYO", "CHL", "AUB", "ETO", "DEF"]
+    origin_station = "VIN"
+    destination_stations = ["NAT", "LYO", "CHL", "AUB", "ETO", "DEF"]
 
     date = "04/02/2020"
 
     write_output = True
 
-    morning_peak_restriction = True
+    morning_peak_restriction = False
 
     if morning_peak_restriction:
         with open(f"f2b/parameters_morning_peak_{origin_station}.yml") as file:
@@ -43,6 +44,9 @@ if __name__ == "__main__":
     # Offline precomputations.
     likelihood_blocks = compute_likelihood_blocks(data, parameters)
     f2b_probabilities_initial = [0 for _ in range(len(data.runs))]
+    start_time = time()
+    minus_log_likelihood_global(f2b_probabilities_initial, [1], data, likelihood_blocks)
+    print(f"One objective function execution time: {time() - start_time:.2}s")
 
     # Likelihood optimization.
     # https://docs.scipy.org/doc/scipy/tutorial/optimize.html

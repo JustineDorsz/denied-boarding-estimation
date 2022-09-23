@@ -22,7 +22,7 @@ def compute_fischer_matrix(
     number_of_trips: int,
 ):
 
-    f2b_estimated = load_estimated_f2b(origin_station)
+    f2b_estimated = load_estimated_f2b(origin_station, False)
 
     with open(f"f2b/parameters_{origin_station}.yml") as file:
         parameters = safe_load(file)

@@ -78,9 +78,9 @@ def compute_one_likelihood_block(
     station_access_duration_distribution_params = param[data.origin_station][
         "parameters"
     ]
-    station_access_distrib_name = param[destination_station]["distribution"]
+    station_egress_distrib_name = param[destination_station]["distribution"]
     station_egress_duration_distribution = eval(
-        "scipy.stats." + station_access_distrib_name
+        "scipy.stats." + station_egress_distrib_name
     )
     station_egress_duration_distribution_params = param[destination_station][
         "parameters"
@@ -232,27 +232,12 @@ def transition_probability(
 
 
 if __name__ == "__main__":
-    start_time = time()
-    origin_station = "CHL"
-    destination_stations = [
-        "AUB",
-        "ETO",
-        "DEF",
-        "NAP",
-        "NAU",
-        "NAV",
-        "RUE",
-        "CRO",
-        "VES",
-        "PEC",
-        "GER",
-    ]
-    date = "03/02/2020"
+    origin_station = "NAT"
+    destination_stations = ["LYO", "CHL", "AUB", "ETO", "DEF"]
+    date = "04/02/2020"
 
-    with open("f2b/parameters.yml") as file:
+    with open(f"f2b/parameters_{origin_station}.yml") as file:
         parameters = safe_load(file)
-
-    initialization = True
 
     data = Data(date, origin_station, destination_stations)
 
@@ -260,19 +245,12 @@ if __name__ == "__main__":
 
     likelihood_blocks = compute_likelihood_blocks(data, parameters)
 
-    # Guess best uniform f2b proba.
-    if initialization:
-        initial_probability_range = linspace(0, 1, 1)
-        objective_values = []
-        for initial_probability in initial_probability_range:
-            f2b_probabilities = [initial_probability for _ in range(len(data.runs))]
-            objective_values.append(
-                minus_log_likelihood_global(
-                    f2b_probabilities, [0], data, likelihood_blocks
-                )
-            )
+    f2b_probabilities = [0 for _ in range(len(data.runs))]
 
-        min_value = min(objective_values)
-        index = objective_values.index(min_value)
-        print(f"best initial probability:{initial_probability_range[index]}")
-        print(f"best initial likelihood: {objective_values[index]}")
+    start_time = time()
+    log_likelihood = minus_log_likelihood_global(
+        f2b_probabilities, [0], data, likelihood_blocks
+    )
+    print(f"One evaluation of likelihood: {time()-start_time}s.")
+
+    print(log_likelihood)

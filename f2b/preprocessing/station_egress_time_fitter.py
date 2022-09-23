@@ -144,15 +144,14 @@ def plot_distributions_and_estimations(
 if __name__ == "__main__":
     start_time = time()
 
-    write_output = True
+    write_output = False
     save_fig = False
     fig_path = "/home/justine/Nextcloud/Cired/Recherche/Econometrie/fail_to_board_probability/Draft_article/figures/"
-    morning_peak_restriction = True
+    morning_peak_restriction = False
 
     dates = ["04/02/2020"]
 
     stations = [
-        "VIN",
         "NAT",
         "LYO",
         "CHL",

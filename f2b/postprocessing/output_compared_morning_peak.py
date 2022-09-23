@@ -1,8 +1,9 @@
-from numpy import linspace
-from f2b.f2b_estimation.data import Data
-from matplotlib import pyplot
+from statistics import mean, stdev
 
+from f2b.f2b_estimation.data import Data
 from f2b.postprocessing.output_analysis import load_estimated_f2b
+from matplotlib import pyplot
+from numpy import linspace
 
 
 def get_trip_number_by_run(data: Data) -> list:
@@ -29,28 +30,16 @@ if __name__ == "__main__":
         "VIN": Data(date, "VIN", destination_stations["VIN"]),
         "NAT": Data(date, "NAT", destination_stations["NAT"]),
     }
-    f2b_estimated = {
-        "VIN": load_estimated_f2b("VIN", False),
-        "NAT": load_estimated_f2b("NAT", False),
-    }
+    f2b_estimated = load_estimated_f2b("NAT", False)
+    f2b_estimated_mp = load_estimated_f2b("NAT", True)
+    difference = [
+        f2b_estimated[i] - f2b_estimated_mp[i] for i in range(len(f2b_estimated))
+    ]
 
     trip_number_by_run = {
         "VIN": get_trip_number_by_run(data["VIN"]),
         "NAT": get_trip_number_by_run(data["NAT"]),
     }
-
-    # There is one run that doesn't serve Vincennes and originates from Nation directly,
-    # thus remove the train from the estimated probabilities in Nation, in position 302.
-    f2b_estimated["NAT"].pop(302)
-    trip_number_by_run["NAT"].pop(302)
-
-    # Apply a threshold to significant estimated probabilities.
-    proba_threshold = 0.2
-    for run in range(len(data["VIN"].runs)):
-        if f2b_estimated["VIN"][run] < proba_threshold:
-            f2b_estimated["VIN"][run] = 0
-        if f2b_estimated["NAT"][run] < proba_threshold:
-            f2b_estimated["NAT"][run] = 0
 
     colors_4am = ["#2a225d", "#c83576", "#ffbe7d", "#e9f98f", "#eaf7ff"]
     plot_graph = {"compared estimated probabilities": True}
@@ -77,38 +66,38 @@ if __name__ == "__main__":
         run_departure_time_labels.append(run_departure_time["VIN"][-1])
 
         ax.bar(
-            run_departure_time["VIN"],
-            f2b_estimated["VIN"],
+            run_departure_time["NAT"],
+            f2b_estimated,
             color=colors_4am[0],
-            label="VIN",
+            label="NAT with whole day parameters",
         )
         ax.bar(
-            run_departure_time["VIN"],
-            [-x for x in f2b_estimated["NAT"]],
+            run_departure_time["NAT"],
+            [-x for x in f2b_estimated_mp],
             color=colors_4am[1],
-            label="NAT",
+            label="NAT with morning peak parameters",
         )
 
-        # ax2 = ax.twinx()
-        # ax2.plot(
-        #     run_departure_time["VIN"],
-        #     trip_number_by_run["VIN"],
-        #     label="VIN",
-        #     color=colors_4am[0],
-        # )
-        # ax2.plot(
-        #     run_departure_time["VIN"],
-        #     [x for x in trip_number_by_run["NAT"]],
-        #     label="NAT",
-        #     color=colors_4am[1],
-        # )
+        ax.bar(
+            run_departure_time["NAT"],
+            difference,
+            color="green",
+            label="difference",
+        )
 
         ax.set_xticks(
-            linspace(0, len(run_departure_time["VIN"]), len(run_departure_time_labels)),
+            linspace(0, len(run_departure_time["NAT"]), len(run_departure_time_labels)),
             labels=run_departure_time_labels,
         )
+        print(
+            f"Estimation with parameters calibrated on the whole day: mean = {mean(f2b_estimated)}, {stdev(f2b_estimated)}."
+        )
+        print(
+            f"Estimation with parameters calibrated on morning peak hour: mean = {mean(f2b_estimated_mp)}, {stdev(f2b_estimated_mp)}."
+        )
+
         pyplot.legend()
         pyplot.show()
         # pyplot.savefig(
-        #     "/home/justine/Nextcloud/Cired/Recherche/Econometrie/fail_to_board_probability/Draft_article/figures/compared_estimated_denied_probability.pdf"
+        # "/home/justine/Nextcloud/Cired/Recherche/Econometrie/fail_to_board_probability/Draft_article/figures/compared_estimated_denied_probability.pdf"
         # )

@@ -6,8 +6,13 @@ from pandas import Timestamp
 MAXIMUM_FEASIBLE_RUNS = 5
 
 
-def load_estimated_f2b(station: str) -> list:
-    with open("f2b/output/f2b_results_" + station + ".csv", "r") as f2b_file:
+def load_estimated_f2b(station: str, morning_peak: bool) -> list:
+    if morning_peak:
+        f2b_file_path = "f2b/output/f2b_results_morning_peak_" + station + ".csv"
+    else:
+        f2b_file_path = "f2b/output/f2b_results_" + station + ".csv"
+
+    with open(f2b_file_path, "r") as f2b_file:
         f2b_file_content = f2b_file.read()
         f2b_estimated = f2b_file_content.split(",")
         f2b_estimated = [float(f2b) for f2b in f2b_estimated]
@@ -35,7 +40,7 @@ if __name__ == "__main__":
     destination_stations = ["LYO", "CHL", "AUB", "ETO", "DEF"]
 
     data = Data(date, origin_station, destination_stations)
-    f2b_estimated = load_estimated_f2b(origin_station)
+    f2b_estimated = load_estimated_f2b(origin_station, False)
     feasible_run_distributions = get_feasible_run_distribution_by_run(data)
 
     plot_graph = {

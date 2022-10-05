@@ -7,10 +7,7 @@ __authors__ = "Justine Dorsz"
 __date__ = "2022-09-21"
 
 from math import log
-from os import access
 from time import time
-from black import diff
-from matplotlib import pyplot
 
 import scipy.stats
 from f2b.f2b_estimation.data import Data
@@ -121,7 +118,7 @@ def compute_access_individual_likelihoods(data: Data, param: dict) -> dict:
 
 
 def log_likelihood_global_with_egress_auxiliary_variables_updates(
-    f2b_probabilities: list,
+    f2b_probabilities: ndarray,
     access_individual_likelihoods: dict,
     egress_individual_likelihoods: dict,
     egress_auxiliary_variables: dict,
@@ -162,7 +159,7 @@ def log_likelihood_global_with_egress_auxiliary_variables_updates(
 
 def indiv_likelihood_and_auxiliary_egress_update_by_run(
     component: int,
-    f2b_probabilities: list,
+    f2b_probabilities: ndarray,
     access_individual_likelihoods: dict,
     egress_individual_likelihoods: dict,
     egress_auxiliary_variables: dict,
@@ -198,7 +195,7 @@ def indiv_likelihood_and_auxiliary_egress_update_by_run(
 
 def differential_log_likelihood_global_by_component(
     component_diff: int,
-    f2b_probabilities: list,
+    f2b_probabilities: ndarray,
     access_individual_likelihoods: dict,
     egress_individual_likelihoods: dict,
     access_auxiliary_variables: dict,
@@ -250,6 +247,8 @@ def differential_log_likelihood_global_by_component(
         else:
             egress_contribution = 0
 
+        if individual_likelihoods[trip_id] == 0:
+            print(trip_id)
         diff_individual_likelihood = (
             access_auxiliary_variables[trip_id, run_diff]
             * (egress_contribution - egress_individual_likelihoods[trip_id, run_diff])
@@ -261,20 +260,20 @@ def differential_log_likelihood_global_by_component(
 
 
 def gradient_log_likelihood_global(
-    f2b_probabilities: list,
+    f2b_probabilities: ndarray,
     access_individual_likelihoods: dict,
     egress_individual_likelihoods: dict,
     access_auxiliary_variables: dict,
     egress_auxiliary_variables: dict,
     individual_likelihoods: dict,
-    individual_likelihood_gradients: dict,
+    individual_log_likelihood_gradients: dict,
     data: Data,
 ) -> list:
     gradient_log_likelihood_global = [0 for _ in range(len(data.runs))]
     for trip_id in data.trips.index:
         for position, run in enumerate(data.feasible_runs_by_trip[trip_id]):
 
-            individual_likelihood_gradients[trip_id, run] = 0
+            individual_log_likelihood_gradients[trip_id, run] = 0
             run_index = data.runs.index(run)
 
             access_auxiliary_variables[trip_id, run] = access_individual_likelihoods[
@@ -299,28 +298,63 @@ def gradient_log_likelihood_global(
                 / individual_likelihoods[trip_id]
             )
 
-            individual_likelihood_gradients[trip_id, run] = gradient_term
+            individual_log_likelihood_gradients[trip_id, run] = gradient_term
             gradient_log_likelihood_global[run_index] += gradient_term
 
     return gradient_log_likelihood_global
 
 
 def hessian_log_likelihood_global(
-    f2b_probabilities: list,
-    access_individual_likelihoods: dict,
+    f2b_probabilities: ndarray,
     egress_individual_likelihoods: dict,
     access_auxiliary_variables: dict,
     egress_auxiliary_variables: dict,
     individual_likelihoods: dict,
-    individual_likelihood_gradients: dict,
+    individual_log_likelihood_gradients: dict,
+    trip_id_restriction: float,
     data: Data,
 ) -> ndarray:
     hessian_log_likelihood_global = array(
-        [[0 for _ in range(len(data.runs))] for _ in range(len(data.runs))]
+        [[0.0 for _ in range(len(data.runs))] for _ in range(len(data.runs))]
     )
-    for trip_id in data.trips.index:
-        for position, run in enumerate(data.feasible_runs_by_trip[trip_id]):
-            ...
+    if trip_id_restriction == 0:
+        trips_loop = data.trips.index
+    else:
+        trips_loop = [trip_id_restriction]
+    for trip_id in trips_loop:
+        for position, first_run in enumerate(data.feasible_runs_by_trip[trip_id]):
+            first_run_index = data.runs.index(first_run)
+            hessian_log_likelihood_global[first_run_index, first_run_index] = (
+                -individual_log_likelihood_gradients[trip_id, first_run] ** 2
+            )
+            auxiliary_proba = 1
+
+            for second_run in data.feasible_runs_by_trip[trip_id][position + 1 :]:
+                if second_run != data.feasible_runs_by_trip[trip_id][-1]:
+                    next_run = data.feasible_runs_by_trip[trip_id][position + 2]
+                    egress_contribution = (
+                        egress_auxiliary_variables[trip_id, next_run]
+                        - egress_individual_likelihoods[trip_id, second_run]
+                    )
+                else:
+                    egress_contribution = -egress_individual_likelihoods[
+                        trip_id, second_run
+                    ]
+
+                second_run_index = data.runs.index(second_run)
+                hessian_log_likelihood_global[first_run_index, second_run_index] = (
+                    egress_contribution
+                    * auxiliary_proba
+                    * access_auxiliary_variables[trip_id, first_run]
+                    / individual_likelihoods[trip_id]
+                    - individual_log_likelihood_gradients[trip_id, first_run]
+                    * individual_log_likelihood_gradients[trip_id, second_run]
+                )
+                hessian_log_likelihood_global[
+                    second_run_index, first_run_index
+                ] = hessian_log_likelihood_global[first_run_index, second_run_index]
+                auxiliary_proba *= f2b_probabilities[second_run_index]
+    return hessian_log_likelihood_global
 
 
 if __name__ == "__main__":
@@ -329,11 +363,11 @@ if __name__ == "__main__":
     destination_stations = ["NAT", "LYO", "CHL", "AUB", "ETO", "DEF"]
     date = "04/02/2020"
 
-    with open(f"f2b/parameters_{origin_station}.yml") as file:
+    with open(f"f2b/parameters/parameters_{origin_station}.yml") as file:
         parameters = safe_load(file)
 
     data = Data(date, origin_station, destination_stations)
-    f2b_probabilities = [0 for _ in range(len(data.runs))]
+    f2b_probabilities = array([0 for _ in range(len(data.runs))])
 
     access_individual_likelihoods = compute_access_individual_likelihoods(
         data, parameters
@@ -370,20 +404,14 @@ if __name__ == "__main__":
     )
     print(f"One evaluation of likelihood gradient: {time()-start}s.")
 
-    component = 52
     start = time()
-    value = differential_log_likelihood_global_by_component(
-        component,
+    hessian_log_likelihood_global = hessian_log_likelihood_global(
         f2b_probabilities,
-        access_individual_likelihoods,
         egress_individual_likelihoods,
         access_auxiliary_variables,
         egress_auxiliary_variables,
         individual_likelihoods,
+        individual_likelihood_gradients,
         data,
     )
-    print(
-        f"One evaluation of likelihood differential in one direction: {time()-start}s."
-    )
-    print(gradient_log_likelihood_global[component])
-    print(value)
+    print(f"One evaluation of likelihood hessian: {time() - start}s.")

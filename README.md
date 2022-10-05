@@ -1,4 +1,4 @@
-# Estimation of F2B probabilities from AFC and AVL data.
+# Estimation of fail-to-board probabilities from AFC and AVL data.
 
 ## Installation
 

@@ -242,12 +242,12 @@ if __name__ == "__main__":
     if write_output:
         if morning_peak_restriction:
             with open(
-                "f2b/parameters_morning_peak_" + stations[0] + ".yml", "w+"
+                "f2b/parameters/parameters_morning_peak_" + stations[0] + ".yml", "w+"
             ) as parameters_file:
                 dump(result_output_writing, parameters_file)
         else:
             with open(
-                "f2b/parameters_" + stations[0] + ".yml", "w+"
+                "f2b/parameters/parameters_" + stations[0] + ".yml", "w+"
             ) as parameters_file:
                 dump(result_output_writing, parameters_file)
 

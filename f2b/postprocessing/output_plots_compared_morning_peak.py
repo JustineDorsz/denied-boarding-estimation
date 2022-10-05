@@ -1,7 +1,7 @@
 from statistics import mean, stdev
 
 from f2b.f2b_estimation.data import Data
-from f2b.postprocessing.output_analysis import load_estimated_f2b
+from f2b.postprocessing.output_plots import load_estimated_f2b
 from matplotlib import pyplot
 from numpy import linspace
 

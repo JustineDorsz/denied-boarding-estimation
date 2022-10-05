@@ -35,8 +35,8 @@ class Data:
         self.db_path = DB_PATH
 
         self._get_all_trips()
-        self.trips["index"] = self.trips["id"]
-        self.trips = self.trips.set_index("id")
+        self.trips["index"] = self.trips["trip_id"]
+        self.trips = self.trips.set_index("trip_id")
 
         self._get_feasible_runs()
 

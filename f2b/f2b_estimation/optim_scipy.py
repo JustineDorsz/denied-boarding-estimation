@@ -33,10 +33,12 @@ if __name__ == "__main__":
     morning_peak_restriction = False
 
     if morning_peak_restriction:
-        with open(f"f2b/parameters_morning_peak_{origin_station}.yml") as file:
+        with open(
+            f"f2b/parameters/parameters_morning_peak_{origin_station}.yml"
+        ) as file:
             parameters = safe_load(file)
     else:
-        with open(f"f2b/parameters_{origin_station}.yml") as file:
+        with open(f"f2b/parameters/parameters_{origin_station}.yml") as file:
             parameters = safe_load(file)
 
     data = Data(date, origin_station, destination_stations)

@@ -2,7 +2,7 @@ from numpy import linspace
 from f2b.f2b_estimation.data import Data
 from matplotlib import pyplot
 
-from f2b.postprocessing.output_analysis import load_estimated_f2b
+from f2b.postprocessing.output_plots import load_estimated_f2b
 
 
 def get_trip_number_by_run(data: Data) -> list:
@@ -13,6 +13,19 @@ def get_trip_number_by_run(data: Data) -> list:
             trip_number_by_run[run_index] += 1
 
     return trip_number_by_run
+
+
+def load_estimated_f2b(station: str, line_search: bool) -> list:
+    if line_search:
+        f2b_file_path = "f2b/output/f2b_results_line_search_" + station + ".csv"
+    else:
+        f2b_file_path = "f2b/output/f2b_results_" + station + ".csv"
+
+    with open(f2b_file_path, "r") as f2b_file:
+        f2b_file_content = f2b_file.read()
+        f2b_estimated = f2b_file_content.split(",")
+        f2b_estimated = [float(f2b) for f2b in f2b_estimated]
+        return f2b_estimated
 
 
 if __name__ == "__main__":
@@ -30,8 +43,8 @@ if __name__ == "__main__":
         "NAT": Data(date, "NAT", destination_stations["NAT"]),
     }
     f2b_estimated = {
-        "VIN": load_estimated_f2b("VIN", False),
-        "NAT": load_estimated_f2b("NAT", False),
+        "VIN": load_estimated_f2b("VIN", True),
+        "NAT": load_estimated_f2b("NAT", True),
     }
 
     trip_number_by_run = {
@@ -45,7 +58,7 @@ if __name__ == "__main__":
     trip_number_by_run["NAT"].pop(302)
 
     # Apply a threshold to significant estimated probabilities.
-    proba_threshold = 0.2
+    proba_threshold = 0
     for run in range(len(data["VIN"].runs)):
         if f2b_estimated["VIN"][run] < proba_threshold:
             f2b_estimated["VIN"][run] = 0

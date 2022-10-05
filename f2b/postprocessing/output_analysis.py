@@ -1,210 +1,134 @@
-from numpy import linspace
+"""
+Analysis of differential informations at estimated f2b.
+"""
+
+__authors__ = "Justine Dorsz"
+__date__ = "2022-09-23"
+
+from math import log
+
 from f2b.f2b_estimation.data import Data
+from f2b.f2b_estimation.likelihood_recursive_blocks import (
+    compute_access_individual_likelihoods,
+    compute_egress_individual_likelihoods,
+    gradient_log_likelihood_global,
+    hessian_log_likelihood_global,
+    log_likelihood_global_with_egress_auxiliary_variables_updates,
+)
+from f2b.postprocessing.output_plots import load_estimated_f2b
 from matplotlib import pyplot
-from pandas import Timestamp
-
-MAXIMUM_FEASIBLE_RUNS = 5
-
-
-def load_estimated_f2b(station: str, morning_peak: bool) -> list:
-    if morning_peak:
-        f2b_file_path = "f2b/output/f2b_results_morning_peak_" + station + ".csv"
-    else:
-        f2b_file_path = "f2b/output/f2b_results_" + station + ".csv"
-
-    with open(f2b_file_path, "r") as f2b_file:
-        f2b_file_content = f2b_file.read()
-        f2b_estimated = f2b_file_content.split(",")
-        f2b_estimated = [float(f2b) for f2b in f2b_estimated]
-        return f2b_estimated
+from numpy import array, linalg
+from pandas import DataFrame
+from yaml import safe_load
 
 
-def get_feasible_run_distribution_by_run(data: Data) -> list:
-    feasible_run_distributions = [
-        [0 for _ in range(len(data.runs))] for _ in range(MAXIMUM_FEASIBLE_RUNS)
-    ]
-    for trip_id in data.trips.index:
-        nbr_feasible_runs = len(data.feasible_runs_by_trip[trip_id])
-        for run in data.feasible_runs_by_trip[trip_id]:
-            run_index = data.runs.index(run)
-            feasible_run_distributions[nbr_feasible_runs - 1][run_index] += 1
+def get_estimation_info_by_run(
+    f2b_estimated: list,
+    origin_station: str,
+    destination_stations: str,
+    date: str,
+) -> DataFrame:
 
-    return feasible_run_distributions
+    estimation_info_df = DataFrame(data=f2b_estimated, columns=["estimated_f2b"])
+
+    data = Data(date, origin_station, destination_stations)
+
+    access_individual_likelihoods = compute_access_individual_likelihoods(
+        data, parameters
+    )
+    egress_individual_likelihoods = compute_egress_individual_likelihoods(
+        data, parameters
+    )
+    individual_likelihoods = {}
+    individual_log_likelihood_gradients = {}
+    access_auxiliary_variables = {}
+    egress_auxiliary_variables = {}
+
+    log_likelihood_global_with_egress_auxiliary_variables_updates(
+        f2b_estimated,
+        access_individual_likelihoods,
+        egress_individual_likelihoods,
+        egress_auxiliary_variables,
+        individual_likelihoods,
+        data,
+    )
+    log_likelihood_contributions_by_run = array(
+        [0.0 for _ in range(len(f2b_estimated))]
+    )
+    trip_number_by_run = array([0.0 for _ in range(len(f2b_estimated))])
+    for run_position in range(len(f2b_estimated)):
+        run_code = data.runs[run_position]
+        trip_number_by_run[run_position] = len(data.concerned_trips_by_run[run_code])
+        for trip_id in data.concerned_trips_by_run[run_code]:
+            log_likelihood_contributions_by_run[run_position] += log(
+                individual_likelihoods[trip_id]
+            )
+    estimation_info_df["log_likelihood"] = log_likelihood_contributions_by_run
+    estimation_info_df["trips_number"] = trip_number_by_run
+
+    gradient_log_likelihood = gradient_log_likelihood_global(
+        f2b_estimated,
+        access_individual_likelihoods,
+        egress_individual_likelihoods,
+        access_auxiliary_variables,
+        egress_auxiliary_variables,
+        individual_likelihoods,
+        individual_log_likelihood_gradients,
+        data,
+    )
+    estimation_info_df["gradient"] = gradient_log_likelihood
+
+    trip_of_interest = 0
+    hessian_log_likelihood = hessian_log_likelihood_global(
+        f2b_estimated,
+        egress_individual_likelihoods,
+        access_auxiliary_variables,
+        egress_auxiliary_variables,
+        individual_likelihoods,
+        individual_log_likelihood_gradients,
+        trip_of_interest,
+        data,
+    )
+
+    fischer_info = -hessian_log_likelihood
+
+    asymptotic_variance = linalg.inv(fischer_info)
+
+    asymptotic_confidence = array(
+        [asymptotic_variance[i, i] for i in range(len(data.runs))]
+    ) / len(data.trips)
+
+    estimation_info_df["asymptotic_confidence"] = asymptotic_confidence
+
+    return estimation_info_df
 
 
 if __name__ == "__main__":
-
+    origin_station = "VIN"
+    destination_stations = ["NAT", "LYO", "CHL", "AUB", "ETO", "DEF"]
     date = "04/02/2020"
 
-    origin_station = "NAT"
-    destination_stations = ["LYO", "CHL", "AUB", "ETO", "DEF"]
+    with open(f"f2b/parameters_{origin_station}.yml") as file:
+        parameters = safe_load(file)
 
-    data = Data(date, origin_station, destination_stations)
-    f2b_estimated = load_estimated_f2b(origin_station, False)
-    feasible_run_distributions = get_feasible_run_distribution_by_run(data)
+    f2b_estimated = load_estimated_f2b(origin_station, True)
 
-    plot_graph = {
-        "feasible run proportion": False,
-        "journey time": True,
-        "tap-in distribution": False,
-        "estimated probabilities": False,
-    }
-    colors_4am = ["#2a225d", "#c83576", "#ffbe7d", "#e9f98f", "#eaf7ff"]
+    estimation_info_df = get_estimation_info_by_run(
+        f2b_estimated, origin_station, destination_stations, date
+    )
+    estimation_info_df_not_zero = estimation_info_df[
+        estimation_info_df["estimated_f2b"] != 0
+    ].copy()
+    print("Partial diff infos.")
+    print(estimation_info_df_not_zero["gradient"].describe())
 
-    # ------------------------------------------------------------------------------------------------------------------------------------
+    print("Asymptotic confidence infos.")
+    print(estimation_info_df_not_zero["asymptotic_confidence"].describe())
+    non_negative_count = (
+        (estimation_info_df_not_zero["asymptotic_confidence"] >= 0).sum().sum()
+    )
+    print(f"Number of non negative values: {non_negative_count}.")
 
-    if plot_graph["feasible run proportion"]:
-
-        run_departure_time = [
-            data.runs_departures[run, data.origin_station] for run in data.runs
-        ]
-        run_departure_time_labels = []
-        for count, run in enumerate(data.runs):
-            if count % 40 == 0:
-                run_departure_time_labels.append(
-                    data.runs_departures[run, data.origin_station]
-                )
-        run_departure_time_labels.append(run_departure_time[-1])
-
-        fig, axs = pyplot.subplots(figsize=(10, 5))
-        bottom = [0 for _ in range(len(data.runs))]
-        for nbr_feasible_runs in range(MAXIMUM_FEASIBLE_RUNS):
-            axs.bar(
-                data.runs,
-                feasible_run_distributions[nbr_feasible_runs],
-                bottom=bottom,
-                color=colors_4am[nbr_feasible_runs],
-                label=f"{nbr_feasible_runs+1} possible runs",
-            )
-            axs.legend()
-            bottom = [
-                bottom[i] + feasible_run_distributions[nbr_feasible_runs][i]
-                for i in range(len(data.runs))
-            ]
-        axs.set_xticks(
-            linspace(0, len(run_departure_time), len(run_departure_time_labels)),
-            labels=run_departure_time_labels,
-        )
-
-        pyplot.savefig(
-            "/home/justine/Nextcloud/Cired/Recherche/Econometrie/fail_to_board_probability/Draft_article/figures/feasible_runs_proportion.pdf"
-        )
-
-    # ------------------------------------------------------------------------------------------------------------------------------------
-
-    if plot_graph["journey time"]:
-
-        journey_time_morning_peak = {}
-        journey_time_afternoon_peak = {}
-        journey_time_off_peak = {}
-        for destination_station in data.possible_destination_stations:
-            journey_time_morning_peak[destination_station] = []
-            journey_time_afternoon_peak[destination_station] = []
-            journey_time_off_peak[destination_station] = []
-
-        for trip_id in data.trips.index:
-            trip_egress_time = data.trips.at[trip_id, "egress_time"]
-            trip_journey_length = (
-                Timestamp(date + " " + str(data.trips.at[trip_id, "egress_time"]))
-                - Timestamp(date + " " + str(data.trips.at[trip_id, "access_time"]))
-            ).seconds
-
-            if trip_egress_time > "07:30:00" and trip_egress_time < "09:30:00":
-                journey_time_morning_peak[
-                    data.trips.at[trip_id, "egress_station"]
-                ].append(trip_journey_length)
-
-            if trip_egress_time > "16:30:00" and trip_egress_time < "19:30:00":
-                journey_time_afternoon_peak[
-                    data.trips.at[trip_id, "egress_station"]
-                ].append(trip_journey_length)
-
-            else:
-                journey_time_off_peak[data.trips.at[trip_id, "egress_station"]].append(
-                    trip_journey_length
-                )
-
-        fig, axs = pyplot.subplots(
-            2, len(data.possible_destination_stations), figsize=(15, 7)
-        )
-        for pos, destination_station in enumerate(data.possible_destination_stations):
-
-            axs[0, pos].hist(
-                journey_time_off_peak[destination_station],
-                bins=40,
-                color=colors_4am[0],
-                label="off-peak hour in " + destination_station,
-            )
-            axs[1, pos].hist(
-                journey_time_morning_peak[destination_station],
-                bins=40,
-                color=colors_4am[1],
-                label="peak hour in " + destination_station,
-            )
-            axs[0, pos].legend()
-            axs[1, pos].legend()
-            axs[0, pos].axis(xmin=0, xmax=2000)
-            axs[1, pos].axis(xmin=0, xmax=2000)
-
-        pyplot.savefig(
-            "/home/justine/Nextcloud/Cired/Recherche/Econometrie/fail_to_board_probability/Draft_article/figures/journey_time_distribution.pdf"
-        )
-
-    # ------------------------------------------------------------------------------------------------------------------------------------
-
-    if plot_graph["tap-in distribution"]:
-
-        tap_in_times = [
-            Timestamp(str(date + " " + access_time))
-            for access_time in data.trips["access_time"]
-        ]
-
-        fig, ax = pyplot.subplots(figsize=(10, 5))
-        run_departure_time = [
-            data.runs_departures[run, data.origin_station] for run in data.runs
-        ]
-        run_departure_time_labels = []
-        for count, run in enumerate(data.runs):
-            if count % 40 == 0:
-                run_departure_time_labels.append(
-                    data.runs_departures[run, data.origin_station]
-                )
-        run_departure_time_labels.append(run_departure_time[-1])
-
-        ax.hist(tap_in_times, bins=200, color=colors_4am[0])
-        # ax.set_xticks(
-        #     linspace(0, len(run_departure_time), len(run_departure_time_labels)),
-        #     labels=run_departure_time_labels,
-        # )
-        # pyplot.show()
-
-        pyplot.savefig(
-            "/home/justine/Nextcloud/Cired/Recherche/Econometrie/fail_to_board_probability/Draft_article/figures/tap_in_times_distribution.pdf"
-        )
-
-    # ------------------------------------------------------------------------------------------------------------------------------------
-
-    if plot_graph["estimated probabilities"]:
-        fig, ax = pyplot.subplots(figsize=(10, 5))
-        run_departure_time = [
-            data.runs_departures[run, data.origin_station] for run in data.runs
-        ]
-        run_departure_time_labels = []
-        for count, run in enumerate(data.runs):
-            if count % 40 == 0:
-                run_departure_time_labels.append(
-                    data.runs_departures[run, data.origin_station]
-                )
-        run_departure_time_labels.append(run_departure_time[-1])
-
-        ax.bar(run_departure_time, f2b_estimated, color=colors_4am[0])
-        ax.bar(run_departure_time, [-x for x in f2b_estimated], color=colors_4am[1])
-
-        ax.set_xticks(
-            linspace(0, len(run_departure_time), len(run_departure_time_labels)),
-            labels=run_departure_time_labels,
-        )
-        pyplot.show()
-        pyplot.savefig(
-            "/home/justine/Nextcloud/Cired/Recherche/Econometrie/fail_to_board_probability/Draft_article/figures/estimated_denied_probability.pdf"
-        )
+    pyplot.plot(estimation_info_df_not_zero["asymptotic_confidence"])
+    pyplot.yscale("log")
+    pyplot.show()

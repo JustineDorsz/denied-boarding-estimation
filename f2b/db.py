@@ -48,7 +48,7 @@ def get_trips_filtered_by(
     cur = conn.cursor()
 
     columns_of_interest = [
-        "id",
+        "trip_id",
         "navigo",
         "date",
         "access_time",
@@ -64,7 +64,7 @@ def get_trips_filtered_by(
             select_columns += ", "
         else:
             select_columns += " "
-    select_columns += "FROM trips "
+    select_columns += "FROM trip "
 
     date_condition = 'WHERE "date" = "' + date + '" '
 
@@ -106,11 +106,11 @@ def get_feasible_runs_for_one_trip(db_path: str, trip_id: int) -> list:
     cur = conn.cursor()
 
     try:
-        cur.execute("CREATE INDEX trip_index ON trip_run(trip_index)")
+        cur.execute("CREATE INDEX trip_index ON trip_run(trip_id)")
     except OperationalError:
         pass
 
-    cur.execute(f'SELECT run FROM trip_run WHERE "trip_index" = {trip_id}')
+    cur.execute(f'SELECT run FROM trip_run WHERE "trip_id" = {trip_id}')
     request_result = cur.fetchall()
     runs = [run[0] for run in request_result]
 

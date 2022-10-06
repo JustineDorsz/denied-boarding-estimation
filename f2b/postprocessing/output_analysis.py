@@ -90,25 +90,25 @@ def get_estimation_info_by_run(
         data,
     )
 
+    (hessian_eigenvalues, vectors) = linalg.eig(hessian_log_likelihood)
+    estimation_info_df["hessian_eigenvalues"] = hessian_eigenvalues
+
     fischer_info = -hessian_log_likelihood
-
     asymptotic_variance = linalg.inv(fischer_info)
-
     asymptotic_confidence = array(
         [asymptotic_variance[i, i] for i in range(len(data.runs))]
     ) / len(data.trips)
-
     estimation_info_df["asymptotic_confidence"] = asymptotic_confidence
 
     return estimation_info_df
 
 
 if __name__ == "__main__":
-    origin_station = "VIN"
-    destination_stations = ["NAT", "LYO", "CHL", "AUB", "ETO", "DEF"]
+    origin_station = "NAT"
+    destination_stations = ["LYO", "CHL", "AUB", "ETO", "DEF"]
     date = "04/02/2020"
 
-    with open(f"f2b/parameters_{origin_station}.yml") as file:
+    with open(f"f2b/parameters/parameters_{origin_station}.yml") as file:
         parameters = safe_load(file)
 
     f2b_estimated = load_estimated_f2b(origin_station, True)
@@ -129,6 +129,7 @@ if __name__ == "__main__":
     )
     print(f"Number of non negative values: {non_negative_count}.")
 
-    pyplot.plot(estimation_info_df_not_zero["asymptotic_confidence"])
-    pyplot.yscale("log")
-    pyplot.show()
+    non_minimum_indices = estimation_info_df_not_zero[
+        estimation_info_df_not_zero["hessian_eigenvalues"] >= 0
+    ]
+    print(non_minimum_indices)

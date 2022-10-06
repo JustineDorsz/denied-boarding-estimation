@@ -34,7 +34,7 @@ if __name__ == "__main__":
 
     write_output = False
 
-    with open(f"f2b/parameters_{origin_station}.yml") as file:
+    with open(f"f2b/parameters/parameters_{origin_station}.yml") as file:
         parameters = safe_load(file)
 
     data = Data(date, origin_station, destination_stations)

@@ -268,12 +268,12 @@ def gradient_log_likelihood_global(
     individual_likelihoods: dict,
     individual_log_likelihood_gradients: dict,
     data: Data,
-) -> list:
-    gradient_log_likelihood_global = [0 for _ in range(len(data.runs))]
+) -> ndarray:
+    gradient_log_likelihood_global = array([0.0 for _ in range(len(data.runs))])
     for trip_id in data.trips.index:
         for position, run in enumerate(data.feasible_runs_by_trip[trip_id]):
 
-            individual_log_likelihood_gradients[trip_id, run] = 0
+            individual_log_likelihood_gradients[trip_id, run] = 0.0
             run_index = data.runs.index(run)
 
             access_auxiliary_variables[trip_id, run] = access_individual_likelihoods[
@@ -321,10 +321,11 @@ def hessian_log_likelihood_global(
         trips_loop = data.trips.index
     else:
         trips_loop = [trip_id_restriction]
-    for trip_id in trips_loop:
+        # for trip_id in trips_loop:
+    for trip_id in data.trips.index:
         for position, first_run in enumerate(data.feasible_runs_by_trip[trip_id]):
             first_run_index = data.runs.index(first_run)
-            hessian_log_likelihood_global[first_run_index, first_run_index] = (
+            hessian_log_likelihood_global[first_run_index, first_run_index] += (
                 -individual_log_likelihood_gradients[trip_id, first_run] ** 2
             )
             auxiliary_proba = 1
@@ -342,7 +343,7 @@ def hessian_log_likelihood_global(
                     ]
 
                 second_run_index = data.runs.index(second_run)
-                hessian_log_likelihood_global[first_run_index, second_run_index] = (
+                hessian_log_likelihood_global[first_run_index, second_run_index] += (
                     egress_contribution
                     * auxiliary_proba
                     * access_auxiliary_variables[trip_id, first_run]

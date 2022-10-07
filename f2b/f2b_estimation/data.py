@@ -9,7 +9,7 @@ from time import time
 from pandas import concat
 from tqdm import tqdm
 
-import f2b.db as db
+import f2b.db.db as db
 
 DB_PATH = "/home/justine/Cired/Data/AFC_AVL_2020_02/RERA_202002.db"
 

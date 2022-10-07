@@ -6,7 +6,7 @@ __date__ = "2022-06-29"
 
 from math import sqrt
 
-import f2b.db as db
+import f2b.db.db as db
 from matplotlib import pyplot
 from numdifftools import Hessian
 from numpy import exp, linalg, log, mean, ndarray, zeros

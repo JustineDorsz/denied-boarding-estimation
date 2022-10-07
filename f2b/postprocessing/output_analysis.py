@@ -92,6 +92,7 @@ def get_estimation_info_by_run(
 
     (hessian_eigenvalues, vectors) = linalg.eig(hessian_log_likelihood)
     estimation_info_df["hessian_eigenvalues"] = hessian_eigenvalues
+    print(vectors[111])
 
     fischer_info = -hessian_log_likelihood
     asymptotic_variance = linalg.inv(fischer_info)
@@ -104,8 +105,8 @@ def get_estimation_info_by_run(
 
 
 if __name__ == "__main__":
-    origin_station = "NAT"
-    destination_stations = ["LYO", "CHL", "AUB", "ETO", "DEF"]
+    origin_station = "VIN"
+    destination_stations = ["NAT", "LYO", "CHL", "AUB", "ETO", "DEF"]
     date = "04/02/2020"
 
     with open(f"f2b/parameters/parameters_{origin_station}.yml") as file:
@@ -116,6 +117,7 @@ if __name__ == "__main__":
     estimation_info_df = get_estimation_info_by_run(
         f2b_estimated, origin_station, destination_stations, date
     )
+
     estimation_info_df_not_zero = estimation_info_df[
         estimation_info_df["estimated_f2b"] != 0
     ].copy()
@@ -132,4 +134,5 @@ if __name__ == "__main__":
     non_minimum_indices = estimation_info_df_not_zero[
         estimation_info_df_not_zero["hessian_eigenvalues"] >= 0
     ]
+
     print(non_minimum_indices)

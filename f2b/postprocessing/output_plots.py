@@ -6,12 +6,9 @@ from pandas import Timestamp
 MAXIMUM_FEASIBLE_RUNS = 5
 
 
-def load_estimated_f2b(station: str, line_search: bool) -> list:
-    if line_search:
-        f2b_file_path = "f2b/output/f2b_results_line_search_" + station + ".csv"
-    else:
-        f2b_file_path = "f2b/output/f2b_results_" + station + ".csv"
+def load_estimated_f2b(station: str, method: str = "") -> list:
 
+    f2b_file_path = "output/f2b_results/" + method + "_" + station + ".csv"
     with open(f2b_file_path, "r") as f2b_file:
         f2b_file_content = f2b_file.read()
         f2b_estimated = f2b_file_content.split(",")

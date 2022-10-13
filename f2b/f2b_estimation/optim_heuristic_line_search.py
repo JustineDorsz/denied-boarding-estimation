@@ -14,7 +14,7 @@ from tqdm import tqdm
 from yaml import safe_load
 
 from data import Data
-from likelihood_recursive_blocks import (
+from f2b.f2b_estimation.likelihood import (
     compute_access_individual_likelihoods,
     compute_egress_individual_likelihoods,
     differential_log_likelihood_global_by_component,

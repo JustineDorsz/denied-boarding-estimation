@@ -13,7 +13,7 @@ from numpy import array, array_equal, linalg, matmul, ndarray
 from yaml import safe_load
 
 from data import Data
-from likelihood_recursive_blocks import (
+from f2b.f2b_estimation.likelihood import (
     compute_access_individual_likelihoods,
     compute_egress_individual_likelihoods,
     gradient_log_likelihood_global,

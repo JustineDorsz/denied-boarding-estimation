@@ -1,8 +1,7 @@
-from numpy import linspace
 from f2b.f2b_estimation.data import Data
-from matplotlib import pyplot
-
 from f2b.postprocessing.output_plots import load_estimated_f2b
+from matplotlib import pyplot
+from numpy import linspace
 
 
 def get_trip_number_by_run(data: Data) -> list:

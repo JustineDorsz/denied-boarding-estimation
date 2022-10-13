@@ -3,7 +3,7 @@ Log-likelihood optimization with repeated line search for each component.
 """
 
 __authors__ = "Justine Dorsz"
-__date__ = "2022-09-22"
+__date__ = "2022-10-12"
 
 from csv import writer
 from time import time
@@ -14,13 +14,8 @@ from tqdm import tqdm
 from yaml import safe_load
 
 from data import Data
-from likelihood_recursive_blocks import (
-    compute_access_individual_likelihoods,
-    compute_egress_individual_likelihoods,
-    differential_log_likelihood_global_by_component,
-    indiv_likelihood_and_auxiliary_egress_update_by_run,
-    log_likelihood_global_with_egress_auxiliary_variables_updates,
-)
+from likelihood import Likelihood
+
 
 if __name__ == "__main__":
 

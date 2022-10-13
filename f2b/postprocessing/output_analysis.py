@@ -3,136 +3,137 @@ Analysis of differential informations at estimated f2b.
 """
 
 __authors__ = "Justine Dorsz"
-__date__ = "2022-09-23"
+__date__ = "2022-10-11"
 
-from math import log
-
+from cmath import sin
 from f2b.f2b_estimation.data import Data
-from f2b.f2b_estimation.likelihood_recursive_blocks import (
-    compute_access_individual_likelihoods,
-    compute_egress_individual_likelihoods,
-    gradient_log_likelihood_global,
-    hessian_log_likelihood_global,
-    log_likelihood_global_with_egress_auxiliary_variables_updates,
-)
-from f2b.postprocessing.output_plots import load_estimated_f2b
-from matplotlib import pyplot
-from numpy import array, linalg
+from f2b.f2b_estimation.likelihood import Likelihood
+from numpy import array, delete, linalg
 from pandas import DataFrame
-from yaml import safe_load
 
 
-def get_estimation_info_by_run(
-    f2b_estimated: list,
-    origin_station: str,
-    destination_stations: str,
-    date: str,
+def load_estimated_f2b(station: str, method: str = "") -> array:
+    """Load fail-to-board estimated probabilities from file.
+
+    Args:
+        - station(int): code of the origin station of the estimated f2b
+        - method(str): estimation method with which was computed f2b
+
+    Return:
+        -array: estimated fail-to-board probabilities by run in chronological order
+    """
+    f2b_file_path = "output/f2b_results/" + method + "_" + station + ".csv"
+    with open(f2b_file_path, "r") as f2b_file:
+        f2b_file_content = f2b_file.read()
+        f2b_estimated = f2b_file_content.split(",")
+        f2b_estimated = array([float(f2b) for f2b in f2b_estimated])
+        return f2b_estimated
+
+
+def get_estimation_results_and_indicators(
+    data: Data,
+    likelihood: Likelihood,
 ) -> DataFrame:
+    """Loads estimated fail-to-board estimated probabilities.
+    Computes gradient and asymptotic confidence interval bounds
+    for each run.
 
-    estimation_info_df = DataFrame(data=f2b_estimated, columns=["estimated_f2b"])
+    Args:
+        - data(Data): trips and runs info
+        - likelihood(Likelihood): likelihood at estimated fail to board probability
 
-    data = Data(date, origin_station, destination_stations)
+    Return:
+        DataFrame: estimation results and indicators for each run.
+        Each run corresponds to a row, each column to a value of interest:
+            - "departure_time"(Timestamp): departure time form the origin station
+            - "estimated_f2b"(float): estimated fail-to-board probability
+            - "trip_number"(int): number of trips associated to the run
+            - "log_likelihood"(float): sum of the log-likelihoods contributions
+            of the trips associated to the run, evaluated at the estimated
+            fail-to-board probability
+            - "gradient"(float): log-likelihood gradient term corresponding to the run
+            evaluated at the estimated fail-to-board probability
+            - "asymptotic_confidence"(float): diagonal term of the asymptotic variance
+            divided by the number of associated trips to the run.
+            The asymptotic variance is computed as the inverse of the opposite of
+            the hessian at the estimated fail-to-board probability.
+    """
 
-    access_individual_likelihoods = compute_access_individual_likelihoods(
-        data, parameters
+    estimation_info_df = DataFrame(
+        data=likelihood.f2b_probas, columns=["estimated_f2b"]
     )
-    egress_individual_likelihoods = compute_egress_individual_likelihoods(
-        data, parameters
-    )
-    individual_likelihoods = {}
-    individual_log_likelihood_gradients = {}
-    access_auxiliary_variables = {}
-    egress_auxiliary_variables = {}
 
-    log_likelihood_global_with_egress_auxiliary_variables_updates(
-        f2b_estimated,
-        access_individual_likelihoods,
-        egress_individual_likelihoods,
-        egress_auxiliary_variables,
-        individual_likelihoods,
-        data,
-    )
-    log_likelihood_contributions_by_run = array(
-        [0.0 for _ in range(len(f2b_estimated))]
-    )
-    trip_number_by_run = array([0.0 for _ in range(len(f2b_estimated))])
-    for run_position in range(len(f2b_estimated)):
-        run_code = data.runs[run_position]
-        trip_number_by_run[run_position] = len(data.concerned_trips_by_run[run_code])
-        for trip_id in data.concerned_trips_by_run[run_code]:
-            log_likelihood_contributions_by_run[run_position] += log(
-                individual_likelihoods[trip_id]
-            )
+    estimation_info_df["departure_time"] = [
+        data.runs[run_code].departure_times[data.origin_station]
+        for run_code in data.runs_chronological_order
+    ]
+
+    log_likelihood_contributions_by_run = array([0.0 for _ in range(data.runs_number)])
+    # loop over run and associated trips for likelihoods contribution by run
+
+    for run_position, run_code in enumerate(data.runs_chronological_order):
+        for trip_id in data.runs[run_code].associated_trips:
+            log_likelihood_contributions_by_run[
+                run_position
+            ] += likelihood.individual_log_likelihoods[trip_id]
+
     estimation_info_df["log_likelihood"] = log_likelihood_contributions_by_run
-    estimation_info_df["trips_number"] = trip_number_by_run
+    estimation_info_df["trips_number"] = [
+        data.runs[run_code].associated_trips_number
+        for run_code in data.runs_chronological_order
+    ]
 
-    gradient_log_likelihood = gradient_log_likelihood_global(
-        f2b_estimated,
-        access_individual_likelihoods,
-        egress_individual_likelihoods,
-        access_auxiliary_variables,
-        egress_auxiliary_variables,
-        individual_likelihoods,
-        individual_log_likelihood_gradients,
-        data,
+    estimation_info_df["gradient"] = likelihood.get_global_log_likelihood_gradient()
+    hessian_log_likelihood = likelihood.get_global_log_likelihood_hessian()
+
+    # Singular runs (with zero associated trips) imply null terms in the log-likelihood
+    # hessian matrix. Remove corresponding row and column in hessian matrix
+    # for inversion.
+    list_of_singular_runs = []
+    for (run_position, run_code) in enumerate(data.runs_chronological_order):
+        if not data.runs[run_code].associated_trips:
+            list_of_singular_runs.append(run_position)
+    hessian_without_singular_rows = delete(
+        hessian_log_likelihood, list_of_singular_runs, 0
     )
-    estimation_info_df["gradient"] = gradient_log_likelihood
-
-    trip_of_interest = 0
-    hessian_log_likelihood = hessian_log_likelihood_global(
-        f2b_estimated,
-        egress_individual_likelihoods,
-        access_auxiliary_variables,
-        egress_auxiliary_variables,
-        individual_likelihoods,
-        individual_log_likelihood_gradients,
-        trip_of_interest,
-        data,
+    hessian_without_singular_runs = delete(
+        hessian_without_singular_rows, list_of_singular_runs, 1
     )
 
-    (hessian_eigenvalues, vectors) = linalg.eig(hessian_log_likelihood)
-    estimation_info_df["hessian_eigenvalues"] = hessian_eigenvalues
-    print(vectors[111])
+    # asymptotic variance is the inverse of -hessian
+    fischer_info = -hessian_without_singular_runs
+    asymptotic_variance_diag = linalg.inv(fischer_info).diagonal().tolist()
+    # add zero term for singular runs for dimensional compatibility
+    shift = len(list_of_singular_runs)
+    for singular_run_position in list_of_singular_runs:
+        asymptotic_variance_diag.insert(singular_run_position - shift, 0)
+        shift -= 1
 
-    fischer_info = -hessian_log_likelihood
-    asymptotic_variance = linalg.inv(fischer_info)
-    asymptotic_confidence = array(
-        [asymptotic_variance[i, i] for i in range(len(data.runs))]
-    ) / len(data.trips)
+    # divide by the numbre of observations for asymptotic confidence
+    asymptotic_confidence = array([0.0 for _ in range(data.runs_number)])
+    for run_position, run_code in enumerate(data.runs_chronological_order):
+        if data.runs[run_code].associated_trips:
+            asymptotic_confidence[run_position] = (
+                asymptotic_variance_diag[run_position]
+                / data.runs[run_code].associated_trips_number
+            )
+
     estimation_info_df["asymptotic_confidence"] = asymptotic_confidence
 
     return estimation_info_df
 
 
 if __name__ == "__main__":
-    origin_station = "VIN"
-    destination_stations = ["NAT", "LYO", "CHL", "AUB", "ETO", "DEF"]
+    origin_station = "NAT"
+    destination_stations = ["LYO", "CHL", "AUB", "ETO", "DEF"]
     date = "04/02/2020"
+    direction = 2
 
-    with open(f"f2b/parameters/parameters_{origin_station}.yml") as file:
-        parameters = safe_load(file)
-
-    f2b_estimated = load_estimated_f2b(origin_station, True)
-
-    estimation_info_df = get_estimation_info_by_run(
-        f2b_estimated, origin_station, destination_stations, date
-    )
-
-    estimation_info_df_not_zero = estimation_info_df[
-        estimation_info_df["estimated_f2b"] != 0
+    f2b_estimated = load_estimated_f2b(origin_station, "line_search")
+    data = Data(date, origin_station, destination_stations, direction)
+    likelihood = Likelihood(data, f2b_estimated)
+    estimation_results = get_estimation_results_and_indicators(data, likelihood)
+    estimation_results_non_zero_proba = estimation_results[
+        estimation_results["estimated_f2b"] != 0
     ].copy()
-    print("Partial diff infos.")
-    print(estimation_info_df_not_zero["gradient"].describe())
-
-    print("Asymptotic confidence infos.")
-    print(estimation_info_df_not_zero["asymptotic_confidence"].describe())
-    non_negative_count = (
-        (estimation_info_df_not_zero["asymptotic_confidence"] >= 0).sum().sum()
-    )
-    print(f"Number of non negative values: {non_negative_count}.")
-
-    non_minimum_indices = estimation_info_df_not_zero[
-        estimation_info_df_not_zero["hessian_eigenvalues"] >= 0
-    ]
-
-    print(non_minimum_indices)
+    print(estimation_results_non_zero_proba["asymptotic_confidence"].describe())

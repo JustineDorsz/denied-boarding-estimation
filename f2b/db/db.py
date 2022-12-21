@@ -1,4 +1,6 @@
-""" Mobility data analysis toolkit. 
+"""
+Estimation of fail-to-board probabilities (also referred to as delayed boarding 
+probabilities) by train run from AFC and AVL data.
 """
 
 __authors__ = "Justine Dorsz"
@@ -7,8 +9,6 @@ from sqlite3 import Connection, Error, OperationalError, connect
 from time import time
 
 from pandas import DataFrame, Timestamp, to_datetime
-
-DB_PATH = "/home/justine/Cired/Data/AFC_AVL_2020_02/RERA_202002.db"
 
 
 def create_connection(db_file: str) -> Connection:

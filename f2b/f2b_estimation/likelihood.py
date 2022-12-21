@@ -1,7 +1,6 @@
 """
-Estimation of fail-to-board probabilities from AFC and AVL data.
-Likelihood function, gradient and hessian in linear time with recursive blocks.
-** MISSING HEADER
+Estimation of fail-to-board probabilities (also referred to as delayed boarding 
+probabilities) by train run from AFC and AVL data.
 """
 
 __authors__ = "Justine Dorsz"
@@ -384,17 +383,3 @@ class Likelihood:
                     auxiliary_proba *= self.f2b_probas[second_run_position]
 
         return hessian_log_likelihood
-
-
-if __name__ == "__main__":
-    origin_station = "NAT"
-    destination_stations = ["LYO", "CHL", "AUB", "ETO", "DEF"]
-    date = "04/02/2020"
-    direction = 2
-
-    data = Data(date, origin_station, destination_stations, direction)
-    f2b_probas = array([0.0 for _ in range(data.runs_number)])
-
-    likelihood = Likelihood(data, f2b_probas)
-    log_likelihood = likelihood.get_global_log_likelihood()
-    gradient = likelihood.get_global_log_likelihood_gradient()

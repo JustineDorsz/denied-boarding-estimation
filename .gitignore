@@ -2,3 +2,6 @@ new_venv
 **/__pycache__
 f2b.egg-info
 __pycache__/
+notebooks
+output
+.vscode

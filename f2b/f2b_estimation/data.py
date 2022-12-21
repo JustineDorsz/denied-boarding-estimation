@@ -1,8 +1,6 @@
-"""Estimation of denied-boarding probabilities from AFC and AVL data.
-
-**MISSING HEADER
-principles classes and methods
-some words about station coding, trip identifier and run code
+"""
+Estimation of fail-to-board probabilities (also referred to as delayed boarding 
+probabilities) by train run from AFC and AVL data.
 """
 
 __authors__ = "Justine Dorsz"
@@ -276,14 +274,3 @@ class Data:
             self.trips[trip_id].associated_runs = [
                 run_code for _, run_code in sorted_zipped_lists
             ]
-
-
-if __name__ == "__main__":
-    start_time = time()
-    origin_station = "VIN"
-    destination_stations = ["NAT", "LYO", "CHL", "AUB", "ETO", "DEF"]
-    direction = 2
-    date = "04/02/2020"
-
-    data = Data(date, origin_station, destination_stations, direction)
-    print(f"Data construction {time() - start_time}s.")

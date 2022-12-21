@@ -1,11 +1,13 @@
 """
-Analysis of differential informations at estimated f2b.
+Estimation of fail-to-board probabilities (also referred to as delayed boarding 
+probabilities) by train run from AFC and AVL data.
 """
 
 __authors__ = "Justine Dorsz"
 __date__ = "2022-10-11"
 
-from cmath import sin
+from math import sqrt
+
 from f2b.f2b_estimation.data import Data
 from f2b.f2b_estimation.likelihood import Likelihood
 from numpy import array, delete, linalg
@@ -113,27 +115,13 @@ def get_estimation_results_and_indicators(
     asymptotic_confidence = array([0.0 for _ in range(data.runs_number)])
     for run_position, run_code in enumerate(data.runs_chronological_order):
         if data.runs[run_code].associated_trips:
-            asymptotic_confidence[run_position] = (
-                asymptotic_variance_diag[run_position]
-                / data.runs[run_code].associated_trips_number
+            asymptotic_confidence[run_position] = sqrt(
+                abs(
+                    asymptotic_variance_diag[run_position]
+                    / data.runs[run_code].associated_trips_number
+                )
             )
 
     estimation_info_df["asymptotic_confidence"] = asymptotic_confidence
 
     return estimation_info_df
-
-
-if __name__ == "__main__":
-    origin_station = "NAT"
-    destination_stations = ["LYO", "CHL", "AUB", "ETO", "DEF"]
-    date = "04/02/2020"
-    direction = 2
-
-    f2b_estimated = load_estimated_f2b(origin_station, "line_search")
-    data = Data(date, origin_station, destination_stations, direction)
-    likelihood = Likelihood(data, f2b_estimated)
-    estimation_results = get_estimation_results_and_indicators(data, likelihood)
-    estimation_results_non_zero_proba = estimation_results[
-        estimation_results["estimated_f2b"] != 0
-    ].copy()
-    print(estimation_results_non_zero_proba["asymptotic_confidence"].describe())

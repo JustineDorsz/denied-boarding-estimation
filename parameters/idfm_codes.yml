@@ -1,0 +1,65 @@
+station_code_order:
+  CHE: 101
+  EUR: 102
+  BUS: 103
+  TOR: 104
+  LOG: 105
+  NOI: 106
+  NCH: 107
+  NGD: 108
+  BRY: 109
+  NEP: 110
+  VAL: 111
+
+  BOI: 201
+  SUC: 202
+  VAR: 203
+  CHA: 204
+  PAR: 205
+  CRE: 206
+  JOI: 207
+  NOG: 208
+  FON: 209
+
+  VIN: 301
+  NAT: 302
+  LYO: 303
+  CHL: 304
+  AUB: 305
+  ETO: 306
+  DEF: 307
+  NAP: 308
+
+  NAU: 401
+  NAV: 402
+  RUE: 403
+  CRO: 404
+  VES: 405
+  PEC: 406
+  GER: 407
+
+  HOC: 501
+  SAR: 502
+  MAL: 503
+
+  AGC: 601
+  POI: 602
+
+  ACV: 701
+  CFO: 702
+  NEU: 703
+  CEP: 704
+  CEC: 705
+  CEH: 706
+
+undetermined_direction_branch_pairs: 
+- 12
+- 21
+- 67
+- 76
+- 64
+- 46
+- 74
+- 47
+- 54
+- 45
